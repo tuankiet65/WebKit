@@ -97,6 +97,7 @@ const TestFeatures& TestOptions::defaults()
             { "FrameFlatteningEnabled", false },
             { "FullScreenEnabled", true },
             { "GenericCueAPIEnabled", false },
+            { "GraphicsContextFiltersEnabled", true },
             { "HiddenPageCSSAnimationSuspensionEnabled", false },
             { "HiddenPageDOMTimerThrottlingEnabled", false },
             { "InlineMediaPlaybackRequiresPlaysInlineAttribute", false },

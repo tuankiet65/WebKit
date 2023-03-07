@@ -149,6 +149,7 @@ private:
     void clearCGShadow();
     // Returns the platform context for purposes of context state change, not draws.
     CGContextRef contextForState() const;
+    void setCGStyle(const std::optional<GraphicsStyle>&);
 
     const RetainPtr<CGContextRef> m_cgContext;
     const RenderingMode m_renderingMode;

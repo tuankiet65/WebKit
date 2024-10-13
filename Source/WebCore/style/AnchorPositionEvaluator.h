@@ -24,7 +24,7 @@
 
 #pragma once
 
-#include "CSSCalcTree.h"
+#include "CSSValueKeywords.h"
 #include "EventTarget.h"
 #include "LayoutUnit.h"
 #include <wtf/HashMap.h>
@@ -55,25 +55,45 @@ using AnchorElements = HashMap<AtomString, WeakRef<Element, WeakPtrImplWithEvent
 struct AnchorPositionedState {
     WTF_MAKE_TZONE_ALLOCATED(AnchorPositionedState);
 public:
+    // Map from anchor name to the Element of the anchor
     AnchorElements anchorElements;
+    // List of anchor names used by the element.
     HashSet<AtomString> anchorNames;
     AnchorPositionResolutionStage stage;
 };
 
 using AnchorsForAnchorName = HashMap<AtomString, Vector<SingleThreadWeakRef<const RenderBoxModelObject>>>;
 
+// https://drafts.csswg.org/css-anchor-position-1/#typedef-anchor-size
+enum class AnchorSizeDimension : uint8_t {
+    Width,
+    Height,
+    Block,
+    Inline,
+    SelfBlock,
+    SelfInline
+};
+
 using AnchorPositionedStates = WeakHashMap<Element, std::unique_ptr<AnchorPositionedState>, WeakPtrImplWithEventTargetData>;
 
 class AnchorPositionEvaluator {
 public:
+    // Find the anchor element indicated by `elementName` and update the associated anchor resolution data.
+    // Returns nullptr if the anchor element can't be found.
+    static RefPtr<Element> findAnchorAndAttemptResolution(const BuilderState&, AtomString elementName);
+
     using Side = std::variant<CSSValueID, double>;
     static std::optional<double> evaluate(const BuilderState&, AtomString elementName, Side);
+    static std::optional<double> evaluateSize(const BuilderState&, AtomString elementName, std::optional<AnchorSizeDimension>);
 
     static void updateAnchorPositioningStatesAfterInterleavedLayout(const Document&);
     static void cleanupAnchorPositionedState(Element&);
     static void updateSnapshottedScrollOffsets(Document&);
 
 private:
+    // Take a anchor-positioned element, and resolve all the anchors that it refers to.
+    // More concretely, for any anchor it refers to by anchor name, it find the Element corresponding to the anchor
+    // anchorPositionedElement MUST BE an anchor-positioned element.
     static AnchorElements findAnchorsForAnchorPositionedElement(const Element&, const HashSet<AtomString>& anchorNames, const AnchorsForAnchorName&);
 };
 

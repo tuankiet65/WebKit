@@ -53,7 +53,8 @@
 namespace WebCore {
 
 struct SameSizeAsStyleRuleBase : public WTF::RefCountedBase {
-    unsigned bitfields : 5;
+    unsigned bitfields : 6;
+    void* vptr;
 };
 
 static_assert(sizeof(StyleRuleBase) == sizeof(SameSizeAsStyleRuleBase), "StyleRuleBase should stay small");

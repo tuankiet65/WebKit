@@ -55,6 +55,8 @@ DECLARE_ALLOCATOR_WITH_HEAP_IDENTIFIER(StyleRuleBase);
 class StyleRuleBase : public RefCounted<StyleRuleBase> {
     WTF_MAKE_STRUCT_FAST_ALLOCATED_WITH_HEAP_IDENTIFIER(StyleRuleBase);
 public:
+    virtual ~StyleRuleBase() = default;
+
     StyleRuleType type() const { return static_cast<StyleRuleType>(m_type); }
     
     bool isCharsetRule() const { return type() == StyleRuleType::Charset; }

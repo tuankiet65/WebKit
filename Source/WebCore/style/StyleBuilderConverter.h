@@ -1682,9 +1682,10 @@ inline String BuilderConverter::convertSVGURIReference(const BuilderState&, cons
     return emptyString();
 }
 
-inline StyleSelfAlignmentData BuilderConverter::convertSelfOrDefaultAlignmentData(const BuilderState&, const CSSValue& value)
+inline StyleSelfAlignmentData BuilderConverter::convertSelfOrDefaultAlignmentData(const BuilderState& state, const CSSValue& value)
 {
     auto alignmentData = RenderStyle::initialSelfAlignment();
+
     if (value.isPair()) {
         if (value.first().valueID() == CSSValueLegacy) {
             alignmentData.setPositionType(ItemPositionType::Legacy);
@@ -1699,6 +1700,10 @@ inline StyleSelfAlignmentData BuilderConverter::convertSelfOrDefaultAlignmentDat
         }
     } else
         alignmentData.setPosition(fromCSSValue<ItemPosition>(value));
+
+    if (alignmentData.position() == ItemPosition::AnchorCenter)
+        Style::AnchorPositionEvaluator::findAnchorAndAttemptResolution(state, { });
+
     return alignmentData;
 }
 

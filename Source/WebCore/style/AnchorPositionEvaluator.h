@@ -26,6 +26,7 @@
 
 #include "CSSValueKeywords.h"
 #include "EventTarget.h"
+#include "LayoutRect.h"
 #include "LayoutUnit.h"
 #include "ScopedName.h"
 #include <wtf/HashMap.h>
@@ -40,6 +41,7 @@ class Document;
 class Element;
 class LayoutRect;
 class RenderBlock;
+class RenderElement;
 class RenderBoxModelObject;
 
 namespace Style {
@@ -47,19 +49,37 @@ namespace Style {
 class BuilderState;
 
 enum class AnchorPositionResolutionStage : uint8_t {
+    // Initial stage where we're collecting name of the anchors referenced by the
+    // anchor-positioned element.
     Initial,
+
+    // At this point, names of anchors references have been fully collected.
     FoundAnchors,
+
+    // At this point, we've resolved the anchor name references to the actual anchor element
+    // (pointer to Element).
     Resolved,
+
+    // The anchor-positioned element has been positioned (layout-ed)
     Positioned,
 };
 
 using AnchorElements = HashMap<AtomString, WeakRef<Element, WeakPtrImplWithEventTargetData>>;
 
+// Data for an anchor-positioned element
 struct AnchorPositionedState {
     WTF_MAKE_TZONE_ALLOCATED(AnchorPositionedState);
 public:
-    AnchorElements anchorElements;
+    // Names of anchors that this anchor-positioned element references.
+    // This is populated when the style is being resolved for the first time.
+    // After the first style resolution, this will be fully populated.
     UncheckedKeyHashSet<AtomString> anchorNames;
+
+    // Map from anchor names to the anchor (as an Element). This is populated after
+    // the style is resolved and layout is run for the first time.
+    AnchorElements anchorElements;
+
+    // Indicates the current resolution state.
     AnchorPositionResolutionStage stage;
 };
 
@@ -75,6 +95,7 @@ enum class AnchorSizeDimension : uint8_t {
     SelfInline
 };
 
+// Mapping from anchor-positioned elements to AnchorPositionedState.
 using AnchorPositionedStates = WeakHashMap<Element, std::unique_ptr<AnchorPositionedState>, WeakPtrImplWithEventTargetData>;
 
 // https://drafts.csswg.org/css-anchor-position-1/#position-try-order-property

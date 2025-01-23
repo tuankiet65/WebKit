@@ -395,15 +395,17 @@ RefPtr<Element> AnchorPositionEvaluator::findAnchorAndAttemptResolution(const Bu
     if (!isValid())
         return { };
 
+    if (!elementName)
+        elementName = builderState.style().positionAnchor();
+    if (!elementName)
+        return nullptr;
+
     Ref anchorPositionedElement = *builderState.element();
 
     auto& anchorPositionedStates = anchorPositionedElement->document().styleScope().anchorPositionedStates();
     auto& anchorPositionedState = *anchorPositionedStates.ensure(anchorPositionedElement, [&] {
         return WTF::makeUnique<AnchorPositionedState>();
     }).iterator->value.get();
-
-    if (!elementName)
-        elementName = builderState.style().positionAnchor();
 
     if (elementName) {
         // Collect anchor names that this element refers to in anchor() or anchor-size()
@@ -741,6 +743,7 @@ void AnchorPositionEvaluator::updateAnchorPositioningStatesAfterInterleavedLayou
             state.stage = AnchorPositionResolutionStage::FoundAnchors;
             continue;
         }
+
         if (state.stage == AnchorPositionResolutionStage::Resolved)
             state.stage = AnchorPositionResolutionStage::Positioned;
     }

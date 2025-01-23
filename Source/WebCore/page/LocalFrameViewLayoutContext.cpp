@@ -159,7 +159,9 @@ void LocalFrameViewLayoutContext::layout(bool canDeferUpdateLayerPositions)
         return;
 
     Style::Scope::QueryContainerUpdateContext queryContainerUpdateContext;
-    while (document() && document()->styleScope().updateQueryContainerState(queryContainerUpdateContext)) {
+    // FIXME: its own type
+    Style::Scope::QueryContainerUpdateContext anchorUpdateContext;
+    while (document() && (document()->styleScope().updateQueryContainerState(queryContainerUpdateContext) || document()->styleScope().updateAnchorState(anchorUpdateContext))) {
         document()->updateStyleIfNeeded();
 
         if (!needsLayout())
@@ -170,6 +172,9 @@ void LocalFrameViewLayoutContext::layout(bool canDeferUpdateLayerPositions)
         if (view().hasOneRef())
             return;
     }
+
+    if (document())
+        Style::AnchorPositionEvaluator::updateAnchorPositioningStatesAfterInterleavedLayout(*document());
 }
 
 void LocalFrameViewLayoutContext::performLayout(bool canDeferUpdateLayerPositions)
@@ -255,6 +260,9 @@ void LocalFrameViewLayoutContext::performLayout(bool canDeferUpdateLayerPosition
             showRenderTree(renderView());
 #endif
     }
+
+    Style::AnchorPositionEvaluator::updateAnchorPositioningStatesAfterInterleavedLayout(*document());
+
     {
         SetForScope layoutPhase(m_layoutPhase, LayoutPhase::InViewSizeAdjust);
         ScriptDisallowedScope::InMainThread scriptDisallowedScope;

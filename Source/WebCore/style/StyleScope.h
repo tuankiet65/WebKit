@@ -157,6 +157,8 @@ public:
     const CSSCounterStyleRegistry& counterStyleRegistry() const { return m_counterStyleRegistry.get(); }
     CSSCounterStyleRegistry& counterStyleRegistry() { return m_counterStyleRegistry.get(); }
 
+    bool updateAnchorState(QueryContainerUpdateContext&);
+
     AnchorPositionedStates& anchorPositionedStates() { return m_anchorPositionedStates; }
     const AnchorPositionedStates& anchorPositionedStates() const { return m_anchorPositionedStates; }
     void clearAnchorPositioningState();
@@ -256,6 +258,7 @@ private:
     // FIXME: These (and some things above) are only relevant for the root scope.
     UncheckedKeyHashMap<ResolverSharingKey, Ref<Resolver>> m_sharedShadowTreeResolvers;
 
+    // This stores anchor resolution data for each anchor-positioned element.
     AnchorPositionedStates m_anchorPositionedStates;
 };
 

@@ -1037,12 +1037,97 @@ void Scope::clearAnchorPositioningState()
 {
     for (auto keyAndValue : m_anchorPositionedStates) {
         CheckedRef element = keyAndValue.key;
+
         if (auto* renderer = dynamicDowncast<RenderBox>(element->renderer()); renderer && renderer->layer())
             renderer->layer()->clearSnapshottedScrollOffsetForAnchorPositioning();
+
+        // this invalidates all anchor-positioned elements.
         keyAndValue.key.invalidateStyle();
     }
 
     m_anchorPositionedStates.clear();
+}
+
+static
+WeakHashMap<Element,
+            std::unique_ptr<WeakHashSet<Element, WeakPtrImplWithEventTargetData>>,
+            WeakPtrImplWithEventTargetData>
+generateAnchorToAnchorPositionedMap(const AnchorPositionedStates& anchorPositionedStates)
+{
+    WeakHashMap<Element,
+                std::unique_ptr<WeakHashSet<Element, WeakPtrImplWithEventTargetData>>,
+                WeakPtrImplWithEventTargetData> result;
+
+    for (auto kvPair : anchorPositionedStates) {
+        auto& element = kvPair.key;
+        const auto* state = kvPair.value.get();
+
+        if (!state)
+            continue;
+
+        if (state->stage < AnchorPositionResolutionStage::FoundAnchors) {
+            // We'll only do invalidation if all anchors referred by anchor-positions elements
+            // have been resolved. If an anchor-positioned element hasn't had its anchor references
+            // resolved, then we'll just return an empty map. Hence the invalidation will not
+            // invalidate anything.
+            return { };
+        }
+
+        for (auto& anchor : state->anchorElements.values()) {
+            result.ensure(anchor.get(), []() {
+                return WTF::makeUnique<WeakHashSet<Element, WeakPtrImplWithEventTargetData>>();
+            });
+
+            auto set = result.get(anchor.get());
+            ASSERT(set);
+
+            set->add(element);
+        }
+    }
+
+    return result;
+}
+
+bool Scope::updateAnchorState(QueryContainerUpdateContext& context)
+{
+    if (!m_document->renderView())
+        return false;
+
+    auto anchorToAnchorPositioned = generateAnchorToAnchorPositionedMap(m_anchorPositionedStates);
+    if (anchorToAnchorPositioned.isEmptyIgnoringNullReferences())
+        return false;
+
+    Vector<CheckedPtr<Element>> anchorPositionedElementsToInvalidate;
+
+    for (auto& anchorRenderer : m_document->renderView()->anchors()) {
+        // Grab the Element associated with the anchor renderer
+        CheckedPtr anchorElement = anchorRenderer.element();
+
+        // Invalidation uses real elements, replace ::before/::after with its host.
+        if (auto* pseudoElement = dynamicDowncast<PseudoElement>(anchorElement.get()))
+            anchorElement = pseudoElement->hostElement();
+        if (!anchorElement)
+            continue;
+
+        // FIXME: only invalidate if the anchor element has changed.
+
+        if (const auto* set = anchorToAnchorPositioned.get(*anchorElement)) {
+            for (auto& anchorPositionedElement : *set) {
+                if (context.invalidatedContainers.add(anchorPositionedElement).isNewEntry)
+                    anchorPositionedElementsToInvalidate.append(anchorPositionedElement);
+            }
+        }
+    }
+
+    for (auto& anchorPositionedElement : anchorPositionedElementsToInvalidate) {
+        if (auto* renderer = dynamicDowncast<RenderBox>(anchorPositionedElement->renderer()); renderer) {
+            renderer->setNeedsLayout();
+            if (renderer->layer())
+                renderer->layer()->clearSnapshottedScrollOffsetForAnchorPositioning();
+        }
+    }
+
+    return !anchorPositionedElementsToInvalidate.isEmpty();
 }
 
 }

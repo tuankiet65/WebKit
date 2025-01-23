@@ -142,7 +142,6 @@ inline RenderElement::RenderElement(Type type, ContainerNode& elementOrDocument,
     , m_didContributeToVisuallyNonEmptyPixelCount(false)
     , m_style(WTFMove(style))
 {
-    ASSERT(RenderObject::isRenderElement());
 }
 
 RenderElement::RenderElement(Type type, Element& element, RenderStyle&& style, OptionSet<TypeFlag> baseTypeFlags, TypeSpecificFlags typeSpecificFlags)
@@ -1631,18 +1630,18 @@ const Element* RenderElement::defaultAnchor() const
 {
     if (!element())
         return nullptr;
+
+    const auto& defaultAnchorName = style().positionAnchor();
+    if (!defaultAnchorName)
+        return nullptr;
+
     auto& anchorPositionedStates = document().styleScope().anchorPositionedStates();
-    auto anchoringStateLookupResult = anchorPositionedStates.find(*element());
-    if (anchoringStateLookupResult == anchorPositionedStates.end() || !anchoringStateLookupResult->value)
+    auto anchorPositionedState = anchorPositionedStates.get(*element());
+    if (!anchorPositionedState)
         return nullptr;
-    const auto& anchoringState = *anchoringStateLookupResult->value;
-    const auto& anchorName = style().positionAnchor();
-    if (!anchorName)
-        return nullptr;
-    auto defaultAnchorLookupResult = anchoringState.anchorElements.find(anchorName->name);
-    if (defaultAnchorLookupResult == anchoringState.anchorElements.end())
-        return nullptr;
-    return &defaultAnchorLookupResult->value.get();
+
+    auto defaultAnchor = anchorPositionedState->anchorElements.get(defaultAnchorName->name);
+    return defaultAnchor;
 }
 
 const RenderElement* RenderElement::defaultAnchorRenderer() const

@@ -9574,7 +9574,8 @@
             "codegen-properties": {
                 "converter": "PositionAnchor",
                 "parser-grammar": "auto | <dashed-ident>",
-                "settings-flag": "cssAnchorPositioningEnabled"
+                "settings-flag": "cssAnchorPositioningEnabled",
+                "high-priority": true
             },
             "specification": {
                 "category": "css-anchor-position",

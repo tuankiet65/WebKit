@@ -2651,7 +2651,7 @@ void Element::invalidateForQueryContainerSizeChange()
 
 void Element::invalidateForAnchorRectChange()
 {
-    Node::invalidateStyle(Style::Validity::ElementInvalid);
+    Node::invalidateStyle(Style::Validity::ElementInvalid, Style::InvalidationMode::RebuildRenderer);
 }
 
 void Element::invalidateForResumingQueryContainerResolution()

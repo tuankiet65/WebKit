@@ -255,6 +255,10 @@ void LocalFrameViewLayoutContext::performLayout(bool canDeferUpdateLayerPosition
             showRenderTree(renderView());
 #endif
     }
+
+    if (document())
+        Style::AnchorPositionEvaluator::updateAnchorPositioningStatesAfterInterleavedLayout(*document());
+
     {
         SetForScope layoutPhase(m_layoutPhase, LayoutPhase::InViewSizeAdjust);
         ScriptDisallowedScope::InMainThread scriptDisallowedScope;

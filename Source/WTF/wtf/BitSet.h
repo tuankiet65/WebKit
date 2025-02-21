@@ -163,21 +163,33 @@ private:
     std::array<WordType, words> bits { };
 };
 
+#define CHECK_SIZE_AND_WARN(n, size) \
+{                                    \
+    if (n >= size)                   \
+        WTFLogAlways("!!! [%s]: %s = %zu >= %s = %zu. This should crash.", __PRETTY_FUNCTION__, #n, n, #size, size); \
+}
+
 template<size_t bitSetSize, typename WordType>
 inline constexpr bool BitSet<bitSetSize, WordType>::get(size_t n, Dependency dependency) const
 {
+    CHECK_SIZE_AND_WARN(n, bitSetSize);
+
     return !!(dependency.consume(this)->bits[n / wordSize] & (one << (n % wordSize)));
 }
 
 template<size_t bitSetSize, typename WordType>
 ALWAYS_INLINE constexpr void BitSet<bitSetSize, WordType>::set(size_t n)
 {
+    CHECK_SIZE_AND_WARN(n, bitSetSize);
+
     bits[n / wordSize] |= (one << (n % wordSize));
 }
 
 template<size_t bitSetSize, typename WordType>
 ALWAYS_INLINE constexpr void BitSet<bitSetSize, WordType>::set(size_t n, bool value)
 {
+    CHECK_SIZE_AND_WARN(n, bitSetSize);
+
     if (value)
         set(n);
     else
@@ -187,6 +199,8 @@ ALWAYS_INLINE constexpr void BitSet<bitSetSize, WordType>::set(size_t n, bool va
 template<size_t bitSetSize, typename WordType>
 inline constexpr bool BitSet<bitSetSize, WordType>::testAndSet(size_t n)
 {
+    CHECK_SIZE_AND_WARN(n, bitSetSize);
+
     WordType mask = one << (n % wordSize);
     size_t index = n / wordSize;
     bool previousValue = bits[index] & mask;
@@ -197,6 +211,8 @@ inline constexpr bool BitSet<bitSetSize, WordType>::testAndSet(size_t n)
 template<size_t bitSetSize, typename WordType>
 inline constexpr bool BitSet<bitSetSize, WordType>::testAndClear(size_t n)
 {
+    CHECK_SIZE_AND_WARN(n, bitSetSize);
+
     WordType mask = one << (n % wordSize);
     size_t index = n / wordSize;
     bool previousValue = bits[index] & mask;
@@ -207,6 +223,8 @@ inline constexpr bool BitSet<bitSetSize, WordType>::testAndClear(size_t n)
 template<size_t bitSetSize, typename WordType>
 ALWAYS_INLINE constexpr bool BitSet<bitSetSize, WordType>::concurrentTestAndSet(size_t n, Dependency dependency)
 {
+    CHECK_SIZE_AND_WARN(n, bitSetSize);
+
     WordType mask = one << (n % wordSize);
     size_t index = n / wordSize;
     WordType* data = dependency.consume(bits.data()) + index;
@@ -226,6 +244,8 @@ ALWAYS_INLINE constexpr bool BitSet<bitSetSize, WordType>::concurrentTestAndSet(
 template<size_t bitSetSize, typename WordType>
 ALWAYS_INLINE constexpr bool BitSet<bitSetSize, WordType>::concurrentTestAndClear(size_t n, Dependency dependency)
 {
+    CHECK_SIZE_AND_WARN(n, bitSetSize);
+
     WordType mask = one << (n % wordSize);
     size_t index = n / wordSize;
     WordType* data = dependency.consume(bits.data()) + index;
@@ -245,6 +265,8 @@ ALWAYS_INLINE constexpr bool BitSet<bitSetSize, WordType>::concurrentTestAndClea
 template<size_t bitSetSize, typename WordType>
 inline constexpr void BitSet<bitSetSize, WordType>::clear(size_t n)
 {
+    CHECK_SIZE_AND_WARN(n, bitSetSize);
+
     bits[n / wordSize] &= ~(one << (n % wordSize));
 }
 
@@ -282,6 +304,8 @@ inline constexpr void BitSet<bitSetSize, WordType>::invert()
 template<size_t bitSetSize, typename WordType>
 inline constexpr size_t BitSet<bitSetSize, WordType>::nextPossiblyUnset(size_t start) const
 {
+    CHECK_SIZE_AND_WARN(start, bitSetSize);
+
     if (!~bits[start / wordSize])
         return ((start / wordSize) + 1) * wordSize;
     return start + 1;
@@ -313,6 +337,8 @@ inline constexpr int64_t BitSet<bitSetSize, WordType>::findRunOfZeros(size_t run
 template<size_t bitSetSize, typename WordType>
 inline constexpr size_t BitSet<bitSetSize, WordType>::count(size_t start) const
 {
+    CHECK_SIZE_AND_WARN(start, bitSetSize);
+
     size_t result = 0;
     for ( ; (start % wordSize); ++start) {
         if (get(start))
@@ -414,12 +440,16 @@ template<size_t bitSetSize, typename WordType>
 template<typename Func>
 ALWAYS_INLINE constexpr void BitSet<bitSetSize, WordType>::forEachSetBit(size_t startIndex, const Func& func) const
 {
+    CHECK_SIZE_AND_WARN(startIndex, bitSetSize);
+
     WTF::forEachSetBit(std::span { bits.data(), bits.size() }, startIndex, func);
 }
 
 template<size_t bitSetSize, typename WordType>
 inline constexpr size_t BitSet<bitSetSize, WordType>::findBit(size_t startIndex, bool value) const
 {
+    CHECK_SIZE_AND_WARN(startIndex, bitSetSize);
+
     WordType skipValue = -(static_cast<WordType>(value) ^ 1);
     size_t wordIndex = startIndex / wordSize;
     size_t startIndexInWord = startIndex - wordIndex * wordSize;
@@ -462,6 +492,9 @@ inline void BitSet<bitSetSize, WordType>::setEachNthBit(size_t n, size_t start, 
 {
     ASSERT(start <= end);
     ASSERT(end <= bitSetSize);
+
+    CHECK_SIZE_AND_WARN(start, bitSetSize);
+    CHECK_SIZE_AND_WARN(end, bitSetSize);
 
     size_t wordIndex = start / wordSize;
     size_t endWordIndex = end / wordSize;

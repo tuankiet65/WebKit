@@ -521,6 +521,45 @@ TEST(WTF_ListHashSet, UniquePtrKey_RemoveUsingRawPointer)
     EXPECT_EQ(1u, ConstructorDestructorCounter::destructionCount);
 }
 
+TEST(WTF_ListHashSet, EqualityComparison)
+{
+    ListHashSet<int> emptyList;
+
+    ListHashSet<int> nonEmptyList1;
+    nonEmptyList1.add(1);
+    nonEmptyList1.add(2);
+
+    ListHashSet<int> nonEmptyList2;
+    nonEmptyList2.add(2);
+    nonEmptyList2.add(3);
+
+    ListHashSet<int> nonEmptyList3;
+    nonEmptyList3.add(1);
+    nonEmptyList3.add(2);
+
+    ListHashSet<int> nonEmptyList4;
+    nonEmptyList4.add(1);
+    nonEmptyList4.add(2);
+    nonEmptyList4.add(3);
+
+    // Lists should be equal to itself
+    ASSERT_TRUE(emptyList == emptyList);
+    ASSERT_TRUE(nonEmptyList1 == nonEmptyList1);
+    ASSERT_TRUE(nonEmptyList2 == nonEmptyList2);
+    ASSERT_TRUE(nonEmptyList3 == nonEmptyList3);
+    ASSERT_TRUE(nonEmptyList4 == nonEmptyList4);
+
+    // Lists of different size should not be equal
+    ASSERT_TRUE(emptyList != nonEmptyList1);
+    ASSERT_TRUE(nonEmptyList4 != nonEmptyList1);
+
+    // List of the same size but different content should not be equal
+    ASSERT_TRUE(nonEmptyList1 != nonEmptyList2);
+
+    // Lists of the same size and content should be equal
+    ASSERT_TRUE(nonEmptyList1 == nonEmptyList3);
+}
+
 class ListHashSetReferencedItem : public RefCounted<ListHashSetReferencedItem> {
 public:
     static Ref<ListHashSetReferencedItem> create()

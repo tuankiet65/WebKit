@@ -21,6 +21,7 @@
 
 #pragma once
 
+#include <wtf/Forward.h>
 #include <wtf/HashSet.h>
 
 #if CHECK_HASHTABLE_ITERATORS
@@ -62,7 +63,7 @@ template<typename ValueArg> struct ListHashSetNode;
 template<typename HashArg> struct ListHashSetNodeHashFunctions;
 template<typename HashArg> struct ListHashSetTranslator;
 
-template<typename ValueArg, typename HashArg = DefaultHash<ValueArg>> class ListHashSet final
+template<typename ValueArg, typename HashArg> class ListHashSet final
 #if CHECK_HASHTABLE_ITERATORS
     : public CanMakeWeakPtr<ListHashSet<ValueArg, HashArg>, WeakPtrFactoryInitialization::Eager>
 #endif
@@ -177,6 +178,9 @@ public:
     template<typename V = ValueType> typename std::enable_if<IsSmartPtr<V>::value && !IsSmartPtr<V>::isNullable, AddResult>::type insertBefore(std::add_const_t<typename GetPtrHelper<V>::UnderlyingType>&, const ValueType&);
     template<typename V = ValueType> typename std::enable_if<IsSmartPtr<V>::value && !IsSmartPtr<V>::isNullable, AddResult>::type insertBefore(std::add_const_t<typename GetPtrHelper<V>::UnderlyingType>&, ValueType&&);
     template<typename V = ValueType> typename std::enable_if<IsSmartPtr<V>::value && !IsSmartPtr<V>::isNullable, bool>::type remove(std::add_const_t<typename GetPtrHelper<V>::UnderlyingType>&);
+
+    template<typename OtherCollection>
+    bool operator==(const OtherCollection&) const;
 
 private:
     void unlink(Node*);
@@ -882,6 +886,20 @@ inline auto ListHashSet<T, U>::makeConstIterator(Node* position) const -> const_
 { 
     return const_iterator(this, position);
 }
+
+template<typename T, typename U>
+template<typename OtherCollection>
+inline bool ListHashSet<T, U>::operator==(const OtherCollection& otherCollection) const
+{
+    if (size() != otherCollection.size())
+        return false;
+    for (const auto& other : otherCollection) {
+        if (!contains(other))
+            return false;
+    }
+    return true;
+}
+
 
 } // namespace WTF
 

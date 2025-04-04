@@ -269,6 +269,35 @@ static bool typeIsInlineOrYAxis(KeywordType type)
     }
 }
 
+static CSSValueID makeAmbiguous(CSSValueID dim)
+{
+    switch (dim) {
+    case CSSValueBlockStart: return CSSValueStart;
+    case CSSValueSpanBlockStart: return CSSValueSpanStart;
+    case CSSValueSelfBlockStart: return CSSValueSelfStart;
+    case CSSValueSpanSelfBlockStart: return CSSValueSpanSelfStart;
+
+    case CSSValueBlockEnd: return CSSValueEnd;
+    case CSSValueSpanBlockEnd: return CSSValueSpanEnd;
+    case CSSValueSelfBlockEnd: return CSSValueSelfEnd;
+    case CSSValueSpanSelfBlockEnd: return CSSValueSpanSelfEnd;
+
+    case CSSValueInlineStart: return CSSValueStart;
+    case CSSValueSpanInlineStart: return CSSValueSpanStart;
+    case CSSValueSelfInlineStart: return CSSValueSelfStart;
+    case CSSValueSpanSelfInlineStart: return CSSValueSpanSelfStart;
+
+    case CSSValueInlineEnd: return CSSValueEnd;
+    case CSSValueSpanInlineEnd: return CSSValueSpanEnd;
+    case CSSValueSelfInlineEnd: return CSSValueSelfEnd;
+    case CSSValueSpanSelfInlineEnd: return CSSValueSpanSelfEnd;
+
+    default:
+        ASSERT_NOT_REACHED();
+        return dim;
+    }
+}
+
 RefPtr<CSSValue> valueForPositionArea(CSSValueID dim1, CSSValueID dim2)
 {
     auto maybeDim1Type = getKeywordType(dim1);
@@ -292,6 +321,16 @@ RefPtr<CSSValue> valueForPositionArea(CSSValueID dim1, CSSValueID dim2)
     // Ensure the X/block axis keyword goes first in the pair.
     if (typeIsInlineOrYAxis(dim1Type) || typeIsBlockOrXAxis(dim2Type))
         std::swap(dim1, dim2);
+
+    // If one keyword is on the block axis and the other keyword is on the inline axis,
+    // the block-/inline- prefix on the keywords can be stripped.
+    // e.g "block-start inline-end" is equivalent to "start end".
+    if ((dim1Type == KeywordType::LogicalBlock && (dim2Type == KeywordType::LogicalInline || dim2Type == KeywordType::Axisless))
+        || (dim1Type == KeywordType::SelfLogicalBlock && (dim2Type == KeywordType::SelfLogicalInline || dim2Type == KeywordType::Axisless))
+        || (dim1Type == KeywordType::Axisless && (dim2Type == KeywordType::LogicalInline || dim2Type == KeywordType::SelfLogicalInline))) {
+        dim1 = makeAmbiguous(dim1);
+        dim2 = makeAmbiguous(dim2);
+    }
 
     return CSSValuePair::create(CSSPrimitiveValue::create(dim1), CSSPrimitiveValue::create(dim2));
 }

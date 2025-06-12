@@ -24,6 +24,7 @@
 
 #pragma once
 
+#include "AnchorTracker.h"
 #include "CSSValueKeywords.h"
 #include "EventTarget.h"
 #include "LayoutUnit.h"
@@ -75,8 +76,6 @@ struct AnchorPositionedState {
 using AnchorPositionedKey = std::pair<RefPtr<const Element>, std::optional<PseudoElementIdentifier>>;
 using AnchorPositionedStates = HashMap<AnchorPositionedKey, std::unique_ptr<AnchorPositionedState>>;
 
-using AnchorsForAnchorName = HashMap<ResolvedScopedName, Vector<SingleThreadWeakRef<const RenderBoxModelObject>>>;
-
 // https://drafts.csswg.org/css-anchor-position-1/#typedef-anchor-size
 enum class AnchorSizeDimension : uint8_t {
     Width,
@@ -93,7 +92,6 @@ struct ResolvedAnchor {
 };
 
 using AnchorPositionedToAnchorMap = WeakHashMap<Element, Vector<ResolvedAnchor>, WeakPtrImplWithEventTargetData>;
-using AnchorToAnchorPositionedMap = SingleThreadWeakHashMap<const RenderBoxModelObject, Vector<Ref<Element>>>;
 
 class AnchorPositionEvaluator {
 public:
@@ -115,8 +113,6 @@ public:
 
     static LayoutRect computeAnchorRectRelativeToContainingBlock(CheckedRef<const RenderBoxModelObject> anchorBox, const RenderBlock& containingBlock);
 
-    static AnchorToAnchorPositionedMap makeAnchorPositionedForAnchorMap(AnchorPositionedToAnchorMap&);
-
     static bool isLayoutTimeAnchorPositioned(const RenderStyle&);
     static CSSPropertyID resolvePositionTryFallbackProperty(CSSPropertyID, WritingMode, const BuilderPositionTryFallback&);
 
@@ -130,7 +126,7 @@ public:
     static CheckedPtr<RenderBoxModelObject> defaultAnchorForBox(const RenderBox&);
 
 private:
-    static AnchorElements findAnchorsForAnchorPositionedElement(const Element&, const UncheckedKeyHashSet<ResolvedScopedName>& anchorNames, const AnchorsForAnchorName&);
+    static AnchorElements findAnchorsForAnchorPositionedElement(const Element&, const UncheckedKeyHashSet<ResolvedScopedName>& anchorNames, const AnchorTracker&);
     static RefPtr<const Element> anchorPositionedElementOrPseudoElement(BuilderState&);
     static AnchorPositionedKey keyForElementOrPseudoElement(const Element&);
 };

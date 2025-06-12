@@ -21,6 +21,7 @@
 
 #pragma once
 
+#include "AnchorPositionEvaluator.h"
 #include "LocalFrameView.h"
 #include "Region.h"
 #include "RenderBlockFlow.h"
@@ -208,9 +209,10 @@ public:
     void unregisterContainerQueryBox(const RenderBox&);
     const SingleThreadWeakHashSet<const RenderBox>& containerQueryBoxes() const { return m_containerQueryBoxes; }
 
-    void registerAnchor(const RenderBoxModelObject&);
+    void registerAnchor(const RenderBoxModelObject&, const FixedVector<Style::ScopedName>&);
     void unregisterAnchor(const RenderBoxModelObject&);
-    const SingleThreadWeakHashSet<const RenderBoxModelObject>& anchors() const { return m_anchors; }
+    Style::AnchorTracker& anchorTracker() { return m_anchorTracker; }
+    const Style::AnchorTracker& anchorTracker() const { return m_anchorTracker; }
 
     void registerPositionTryBox(const RenderBox&);
     void unregisterPositionTryBox(const RenderBox&);
@@ -290,7 +292,7 @@ private:
 
     SingleThreadWeakHashSet<const RenderBox> m_boxesWithScrollSnapPositions;
     SingleThreadWeakHashSet<const RenderBox> m_containerQueryBoxes;
-    SingleThreadWeakHashSet<const RenderBoxModelObject> m_anchors;
+    Style::AnchorTracker m_anchorTracker;
     SingleThreadWeakHashSet<const RenderBox> m_positionTryBoxes;
 
     SingleThreadWeakPtr<RenderBlockFlow> m_viewTransitionContainingBlock;

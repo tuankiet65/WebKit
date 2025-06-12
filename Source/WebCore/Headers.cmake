@@ -2733,6 +2733,7 @@ set(WebCore_PRIVATE_FRAMEWORK_HEADERS
     storage/StorageUtilities.h
 
     style/AnchorPositionEvaluator.h
+    style/AnchorTracker.h
     style/PseudoElementIdentifier.h
     style/ResolvedScopedName.h
     style/ScopedName.h

@@ -142,7 +142,8 @@ void RenderBoxModelObject::styleWillChange(StyleDifference diff, const RenderSty
     const RenderStyle* oldStyle = hasInitializedStyle() ? &style() : nullptr;
 
     if (Style::AnchorPositionEvaluator::isAnchor(newStyle))
-        view().registerAnchor(*this);
+        // FIXME: could be implicit anchors!
+        view().registerAnchor(*this, newStyle.anchorNames());
     else if (oldStyle && Style::AnchorPositionEvaluator::isAnchor(*oldStyle))
         view().unregisterAnchor(*this);
 

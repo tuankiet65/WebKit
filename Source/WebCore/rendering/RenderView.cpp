@@ -1102,14 +1102,14 @@ void RenderView::unregisterContainerQueryBox(const RenderBox& box)
     m_containerQueryBoxes.remove(box);
 }
 
-void RenderView::registerAnchor(const RenderBoxModelObject& renderer)
+void RenderView::registerAnchor(const RenderBoxModelObject& renderer, const FixedVector<Style::ScopedName>& anchorNames)
 {
-    m_anchors.add(renderer);
+    m_anchorTracker.registerAnchor(renderer, anchorNames);
 }
 
 void RenderView::unregisterAnchor(const RenderBoxModelObject& renderer)
 {
-    m_anchors.remove(renderer);
+    m_anchorTracker.unregisterAnchor(renderer);
 }
 
 void RenderView::registerPositionTryBox(const RenderBox& box)

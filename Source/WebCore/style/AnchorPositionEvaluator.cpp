@@ -884,12 +884,12 @@ static RefPtr<Element> findImplicitAnchor(const Element& anchorPositionedElement
     return nullptr;
 }
 
-static RefPtr<Element> findLastAcceptableAnchorWithName(ResolvedScopedName anchorName, const Element& anchorPositionedElement, const AnchorsForAnchorName& anchorsForAnchorName)
+static RefPtr<Element> findLastAcceptableAnchorWithName(ResolvedScopedName anchorName, const Element& anchorPositionedElement, const AnchorTracker& anchorTracker)
 {
     if (anchorName.name() == implicitAnchorElementName().name)
         return findImplicitAnchor(anchorPositionedElement);
 
-    const auto& anchors = anchorsForAnchorName.get(anchorName);
+    const auto& anchors = anchorTracker.sortedAnchorsWithName(anchorName);
 
     for (auto& anchor : makeReversedRange(anchors)) {
         if (isAcceptableAnchorElement(anchor.get(), anchorPositionedElement, anchorName.name()))
@@ -899,48 +899,13 @@ static RefPtr<Element> findLastAcceptableAnchorWithName(ResolvedScopedName ancho
     return { };
 }
 
-static AnchorsForAnchorName collectAnchorsForAnchorName(const Document& document)
-{
-    if (!document.renderView())
-        return { };
-
-    AnchorsForAnchorName anchorsForAnchorName;
-
-    auto& anchors = document.renderView()->anchors();
-    for (auto& anchorRenderer : anchors) {
-        CheckedPtr anchorElement = anchorRenderer.element();
-        ASSERT(anchorElement);
-
-        for (auto& scopedName : anchorRenderer.style().anchorNames()) {
-            auto resolvedScopedName = ResolvedScopedName::createFromScopedName(*anchorElement, scopedName);
-
-            anchorsForAnchorName.ensure(resolvedScopedName, [&] {
-                return AnchorsForAnchorName::MappedType { };
-            }).iterator->value.append(anchorRenderer);
-        }
-    }
-
-    // Sort them in tree order.
-    for (auto& anchors : anchorsForAnchorName.values()) {
-        std::ranges::sort(anchors, [](auto& a, auto& b) {
-            // FIXME: Figure out anonymous pseudo-elements.
-            if (!a->element() || !b->element())
-                return !!b->element();
-            return is_lt(treeOrder<ComposedTree>(*a->element(), *b->element()));
-        });
-    }
-
-    return anchorsForAnchorName;
-}
-
-AnchorElements AnchorPositionEvaluator::findAnchorsForAnchorPositionedElement(const Element& anchorPositionedElement, const UncheckedKeyHashSet<ResolvedScopedName>& anchorNames, const AnchorsForAnchorName& anchorsForAnchorName)
+AnchorElements AnchorPositionEvaluator::findAnchorsForAnchorPositionedElement(const Element& anchorPositionedElement, const UncheckedKeyHashSet<ResolvedScopedName>& anchorNames, const AnchorTracker& anchorTracker)
 {
     AnchorElements anchorElements;
 
     for (auto& anchorName : anchorNames) {
-        auto anchor = findLastAcceptableAnchorWithName(anchorName, anchorPositionedElement, anchorsForAnchorName);
-        if (anchor)
-            anchorElements.add(anchorName, anchor);
+        auto anchor = findLastAcceptableAnchorWithName(anchorName, anchorPositionedElement, anchorTracker);
+        anchorElements.add(anchorName, anchor);
     }
 
     return anchorElements;
@@ -948,14 +913,39 @@ AnchorElements AnchorPositionEvaluator::findAnchorsForAnchorPositionedElement(co
 
 void AnchorPositionEvaluator::updateAnchorPositioningStatesAfterInterleavedLayout(Document& document, AnchorPositionedStates& anchorPositionedStates)
 {
-    if (anchorPositionedStates.isEmpty())
-        return;
-
     // FIXME: Make the code below oeprate on renderers (boxes) rather than elements.
-    auto anchorsForAnchorName = collectAnchorsForAnchorName(document);
+    auto& anchorTracker = document.renderView()->anchorTracker();
+
+    WeakHashSet<Element, WeakPtrImplWithEventTargetData> anchorPositionedToRedoMatching;
+    for (const auto [anchorPositioned, anchorDependencies] : document.styleScope().anchorPositionedToAnchorMap()) {
+        bool shouldInvalidate = [&] () {
+            // FIXME: could cache anchor invalidation status, so we don't repeat this checking step.
+            for (const auto& anchorDependency : anchorDependencies) {
+                if (anchorTracker.anchorNameIsDirty(anchorDependency.name))
+                    return true;
+            }
+
+            return false;
+        }();
+
+        if (shouldInvalidate) {
+            anchorPositionedToRedoMatching.add(anchorPositioned);
+            const_cast<Element&>(anchorPositioned).invalidateForResumingAnchorPositionedElementResolution();
+        }
+    }
+
+    anchorTracker.markAsClean();
 
     for (auto& elementAndState : anchorPositionedStates) {
         auto& state = *elementAndState.value;
+
+        RefPtr element = elementAndState.key.first;
+        if (elementAndState.key.second)
+            element = element->pseudoElementIfExists(*elementAndState.key.second);
+
+        if (anchorPositionedToRedoMatching.contains(*element.get()))
+            state.stage = AnchorPositionResolutionStage::FindAnchors;
+
         if (state.stage == AnchorPositionResolutionStage::FindAnchors) {
             RefPtr element = elementAndState.key.first;
             if (elementAndState.key.second)
@@ -964,14 +954,14 @@ void AnchorPositionEvaluator::updateAnchorPositioningStatesAfterInterleavedLayou
             CheckedPtr renderer = element ? element->renderer() : nullptr;
             if (renderer) {
                 // FIXME: Remove the redundant anchorElements member. The mappings are available in anchorPositionedToAnchorMap.
-                state.anchorElements = findAnchorsForAnchorPositionedElement(*element, state.anchorNames, anchorsForAnchorName);
+                state.anchorElements = findAnchorsForAnchorPositionedElement(*element, state.anchorNames, anchorTracker);
                 if (isLayoutTimeAnchorPositioned(renderer->style()))
                     renderer->setNeedsLayout();
 
                 Vector<ResolvedAnchor> anchors;
                 for (auto& anchorNameAndElement : state.anchorElements) {
                     anchors.append(ResolvedAnchor {
-                        .renderer = dynamicDowncast<RenderBoxModelObject>(anchorNameAndElement.value->renderer()),
+                        .renderer = anchorNameAndElement.value ? dynamicDowncast<RenderBoxModelObject>(anchorNameAndElement.value->renderer()) : nullptr,
                         .name = anchorNameAndElement.key
                     });
                 }
@@ -980,6 +970,7 @@ void AnchorPositionEvaluator::updateAnchorPositioningStatesAfterInterleavedLayou
             state.stage = renderer && renderer->style().usesAnchorFunctions() ? AnchorPositionResolutionStage::ResolveAnchorFunctions : AnchorPositionResolutionStage::Resolved;
             continue;
         }
+
         if (state.stage == AnchorPositionResolutionStage::Resolved)
             state.stage = AnchorPositionResolutionStage::Positioned;
     }
@@ -1011,12 +1002,18 @@ void AnchorPositionEvaluator::updateSnapshottedScrollOffsets(Document& document)
         if (!anchorPositionedRenderer || !anchorPositionedRenderer->layer())
             continue;
 
+        Vector<ResolvedAnchor> filteredAnchorElements;
+        for (const auto& anchorElement : elementAndAnchors.value) {
+            if (anchorElement.renderer)
+                filteredAnchorElements.append(anchorElement);
+        }
+
         auto needsScrollAdjustment = [&] {
             // FIXME: This is incomplete.
             if (!anchorPositionedRenderer->style().positionAnchor())
                 return false;
 
-            if (elementAndAnchors.value.size() != 1)
+            if (filteredAnchorElements.size() != 1)
                 return false;
 
             return true;
@@ -1027,7 +1024,7 @@ void AnchorPositionEvaluator::updateSnapshottedScrollOffsets(Document& document)
             continue;
         }
 
-        auto anchor = elementAndAnchors.value.first();
+        auto anchor = filteredAnchorElements.first();
         if (!anchor.renderer)
             continue;
 
@@ -1049,23 +1046,6 @@ void AnchorPositionEvaluator::updateAfterOverflowScroll(Document& document)
     // Also check if scrolling has caused any anchor boxes to move.
     Style::Scope::LayoutDependencyUpdateContext context;
     document.checkedStyleScope()->invalidateForAnchorDependencies(context);
-}
-
-auto AnchorPositionEvaluator::makeAnchorPositionedForAnchorMap(AnchorPositionedToAnchorMap& toAnchorMap) -> AnchorToAnchorPositionedMap
-{
-    AnchorToAnchorPositionedMap map;
-
-    for (auto elementAndAnchors : toAnchorMap) {
-        CheckedRef anchorPositionedElement = elementAndAnchors.key;
-        for (auto& anchor : elementAndAnchors.value) {
-            if (!anchor.renderer)
-                continue;
-            map.ensure(*anchor.renderer, [&] {
-                return Vector<Ref<Element>> { };
-            }).iterator->value.append(anchorPositionedElement);
-        }
-    }
-    return map;
 }
 
 bool AnchorPositionEvaluator::isLayoutTimeAnchorPositioned(const RenderStyle& style)

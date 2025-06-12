@@ -1386,7 +1386,11 @@ auto TreeResolver::updateAnchorPositioningState(Element& element, const RenderSt
         AnchorPositionEvaluator::updateAnchorPositionedStateForLayoutTimePositioned(element, *style, m_treeResolutionState.anchorPositionedStates);
 
         if (changes && !style->anchorNames().isEmpty()) {
-            // Existing anchor positions may change due to a style change. We need a round of interleaving.
+            // FIXME: only set when the anchor name changes from old style to new style.
+            // Issue is, where to get old style?
+
+            // !style->anchorNames().isEmpty() doesn't work, because an element can go from having
+            // any names, to haing no names, and in that case, interleaved layout is required.
             m_needsInterleavedLayout = true;
         }
     };

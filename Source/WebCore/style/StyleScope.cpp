@@ -1004,11 +1004,6 @@ bool Scope::invalidateForAnchorDependencies(LayoutDependencyUpdateContext& conte
 
     Vector<CheckedRef<Element>> anchoredElementsToInvalidate;
 
-    if (m_document->renderView()->anchors().isEmptyIgnoringNullReferences())
-        return false;
-
-    auto anchorMap = AnchorPositionEvaluator::makeAnchorPositionedForAnchorMap(m_anchorPositionedToAnchorMap);
-
     auto makeAnchorPosition = [&](const RenderBoxModelObject& anchorRenderer) {
         AnchorPosition result;
         result.absoluteRect = anchorRenderer.absoluteBoundingBoxRect();
@@ -1021,23 +1016,30 @@ bool Scope::invalidateForAnchorDependencies(LayoutDependencyUpdateContext& conte
         return result;
     };
 
-    for (auto& anchorRenderer : m_document->renderView()->anchors()) {
-        auto anchorPosition = makeAnchorPosition(anchorRenderer);
-        m_anchorPositionsOnLastUpdate.add(anchorRenderer, anchorPosition);
+    for (const auto [anchorPositioned, anchorDependencies] : m_anchorPositionedToAnchorMap) {
+        bool shouldInvalidate = [&] () {
+            // FIXME: could cache anchor invalidation status, so we don't repeat this checking step.
+            for (const auto& anchorDependency : anchorDependencies) {
+                if (!anchorDependency.renderer)
+                    continue;
 
-        auto it = previousAnchorPositions.find(anchorRenderer);
-        bool changed = it == previousAnchorPositions.end() || it->value != anchorPosition;
-        if (!changed)
-            continue;
+                auto anchorPosition = m_anchorPositionsOnLastUpdate.ensure(*anchorDependency.renderer, [&] () {
+                    return makeAnchorPosition(*anchorDependency.renderer);
+                }).iterator->value;
 
-        auto anchoredElements = anchorMap.getOptional(anchorRenderer);
-        if (!anchoredElements)
-            continue;
+                auto it = previousAnchorPositions.find(*anchorDependency.renderer);
+                bool changed = it == previousAnchorPositions.end() || it->value != anchorPosition;
+                if (changed)
+                    return true;
+            }
 
-        for (auto& anchoredElement : *anchoredElements) {
-            if (!context.invalidatedAnchorPositioned.add(anchoredElement.get()).isNewEntry)
+            return false;
+        }();
+
+        if (shouldInvalidate) {
+            if (!context.invalidatedAnchorPositioned.add(anchorPositioned).isNewEntry)
                 continue;
-            anchoredElementsToInvalidate.append(anchoredElement);
+            anchoredElementsToInvalidate.append(anchorPositioned);
         }
     }
 

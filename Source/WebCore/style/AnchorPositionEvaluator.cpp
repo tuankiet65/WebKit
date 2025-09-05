@@ -612,12 +612,16 @@ static std::pair<CSSPropertyID, bool> applyTryTacticsToInset(CSSPropertyID prope
 // See: https://drafts.csswg.org/css-anchor-position-1/#anchor-pos
 static LayoutUnit computeInsetValue(CSSPropertyID insetPropertyID, CheckedRef<const RenderBoxModelObject> anchorBox, CheckedRef<const RenderBox> anchorPositionedRenderer, AnchorPositionEvaluator::Side anchorSide, const std::optional<BuilderPositionTryFallback>& positionTryFallback)
 {
+    ALWAYS_LOG_WITH_STREAM(stream << "[computeInsetValue]: entry for inset property: " << insetPropertyID);
+
     auto writingMode = anchorPositionedRenderer->writingMode();
     bool isFlipped = false;
     if (positionTryFallback)
         std::tie(insetPropertyID, isFlipped) = applyTryTacticsToInset(insetPropertyID, writingMode, *positionTryFallback);
 
     auto selfLogicalAxis = mapInsetPropertyToLogicalAxis(insetPropertyID, writingMode);
+    ALWAYS_LOG_WITH_STREAM(stream << "[computeInsetValue]:     selfLogicalAxis: " << (uint8_t)selfLogicalAxis);
+
     PositionedLayoutConstraints constraints(anchorPositionedRenderer, selfLogicalAxis);
 
     auto anchorPercentage = [&]() -> double {
@@ -659,15 +663,29 @@ static LayoutUnit computeInsetValue(CSSPropertyID insetPropertyID, CheckedRef<co
     if (constraints.startIsBefore() == isFlipped)
         anchorPercentage = 1 - anchorPercentage;
 
+    ALWAYS_LOG_WITH_STREAM(stream << "[computeInsetValue]:     anchorPercentage: " << anchorPercentage);
+
     auto containingBlock = anchorPositionedRenderer->container();
     ASSERT(containingBlock);
+
     auto anchorRect = AnchorPositionEvaluator::computeAnchorRectRelativeToContainingBlock(anchorBox, *containingBlock, anchorPositionedRenderer.get());
+    ALWAYS_LOG_WITH_STREAM(stream << "[computeInsetValue]:     anchorRect: " << anchorRect);
+
     auto anchorRange = constraints.extractRange(anchorRect);
+    ALWAYS_LOG_WITH_STREAM(stream << "[computeInsetValue]:     anchorRange: " << anchorRange);
 
     auto anchorPosition = anchorRange.min() + LayoutUnit(anchorRange.size() * anchorPercentage);
+    ALWAYS_LOG_WITH_STREAM(stream << "[computeInsetValue]:     anchorPosition: " << anchorPosition);
+
+    ALWAYS_LOG_WITH_STREAM(stream << "[computeInsetValue]:     constraints.containingRange(): " << constraints.containingRange());
+
     auto insetValue = isInsetPropertyContainerStartSide(insetPropertyID, constraints) == constraints.startIsBefore()
         ? anchorPosition - constraints.containingRange().min()
         : constraints.containingRange().max() - anchorPosition;
+
+
+    ALWAYS_LOG_WITH_STREAM(stream << "[computeInsetValue]:     insetValue: " << insetValue);
+
     return insetValue;
 }
 
@@ -1206,7 +1224,9 @@ void AnchorPositionEvaluator::updateAnchorPositioningStatesAfterInterleavedLayou
 
     for (auto& elementAndState : anchorPositionedStates) {
         auto& state = *elementAndState.value;
-        if (state.stage == AnchorPositionResolutionStage::FindAnchors) {
+
+        switch (state.stage) {
+        case AnchorPositionResolutionStage::FindAnchors: {
             RefPtr element = elementAndState.key.first;
             if (elementAndState.key.second)
                 element = element->pseudoElementIfExists(*elementAndState.key.second);
@@ -1232,10 +1252,20 @@ void AnchorPositionEvaluator::updateAnchorPositioningStatesAfterInterleavedLayou
                 });
             }
             state.stage = renderer && renderer->style().usesAnchorFunctions() ? AnchorPositionResolutionStage::ResolveAnchorFunctions : AnchorPositionResolutionStage::Resolved;
-            continue;
+            break;
         }
-        if (state.stage == AnchorPositionResolutionStage::Resolved)
+
+        case AnchorPositionResolutionStage::ResolveAnchorFunctions:
             state.stage = AnchorPositionResolutionStage::Positioned;
+            break;
+
+        case AnchorPositionResolutionStage::Resolved:
+            state.stage = AnchorPositionResolutionStage::Positioned;
+            break;
+        
+        case AnchorPositionResolutionStage::Positioned:
+            break;
+        }
     }
 }
 
@@ -1257,7 +1287,11 @@ void AnchorPositionEvaluator::updateAnchorPositionedStateForDefaultAnchorAndPosi
     if (shouldResolveDefaultAnchor) {
         // Always resolve the default anchor. Even if nothing is anchored to it we need it to compute the scroll compensation.
         auto resolvedDefaultAnchor = ResolvedScopedName::createFromScopedName(element, defaultAnchorName(style));
-        state->anchorNames.add(resolvedDefaultAnchor);
+        if (state->anchorNames.add(resolvedDefaultAnchor).isNewEntry) {
+            // If anchor resolution has progressed past FindAnchors, and we pick up a new anchor name, set the
+            // stage back to Initial. This restarts the resolution process to resolve newly added names.
+            state->stage = AnchorPositionResolutionStage::FindAnchors;
+        }
     }
 }
 

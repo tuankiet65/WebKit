@@ -2107,6 +2107,32 @@ LayoutRect LocalFrameView::viewportConstrainedVisibleContentRect() const
     return viewportRect;
 }
 
+std::optional<LayoutRect> LocalFrameView::visibleRectInParentFrame() const
+{
+    RefPtr ownerRenderer = protectedFrame()->ownerRenderer();
+
+    if (!ownerRenderer)
+        return { };
+
+    auto visibleRect = ownerRenderer->computeVisibleRectsInContainer(
+        // FIXME: correct box to use?
+        { ownerRenderer->frameRect() },
+        &ownerRenderer->view(),
+        {
+            .hasPositionFixedDescendant = false,
+            .dirtyRectIsFlipped = false,
+            .descendantNeedsEnclosingIntRect = false,
+            .options = {
+                VisibleRectContext::Option::UseEdgeInclusiveIntersection,
+                VisibleRectContext::Option::ApplyCompositedClips,
+                VisibleRectContext::Option::ApplyCompositedContainerScrolls
+            },
+        }
+    );
+
+    return visibleRect.transform([](auto& result) { return result.clippedOverflowRect; });
+}
+
 LayoutRect LocalFrameView::rectForFixedPositionLayout() const
 {
     if (m_frame->settings().visualViewportEnabled())

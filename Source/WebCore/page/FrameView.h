@@ -110,6 +110,9 @@ public:
     IntRect convertFromContainingView(const IntRect&) const final;
     FloatRect convertFromContainingView(const FloatRect&) const final;
 
+    WEBCORE_EXPORT virtual LayoutRect layoutViewportRect() const = 0;
+    virtual std::optional<LayoutRect> visibleRectInParentFrame() const = 0;
+
 private:
     ScrollableArea* enclosingScrollableArea() const final;
 

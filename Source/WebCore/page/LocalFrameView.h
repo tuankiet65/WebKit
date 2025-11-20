@@ -321,8 +321,10 @@ public:
     std::optional<LayoutRect> visualViewportOverrideRect() const { return m_visualViewportOverrideRect; }
 
     // These are in document coordinates, unaffected by page scale (but affected by zooming).
-    WEBCORE_EXPORT LayoutRect layoutViewportRect() const;
+    WEBCORE_EXPORT LayoutRect layoutViewportRect() const final;
     WEBCORE_EXPORT LayoutRect visualViewportRect() const;
+
+    std::optional<LayoutRect> visibleRectInParentFrame() const final;
 
     LayoutRect layoutViewportRectIncludingObscuredInsets() const;
     

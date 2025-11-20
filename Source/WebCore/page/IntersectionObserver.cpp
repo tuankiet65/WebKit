@@ -349,40 +349,80 @@ static void expandRootBoundsWithRootMargin(FloatRect& rootBounds, const Intersec
     rootBounds.expand(rootMarginEdges);
 }
 
-static std::optional<LayoutRect> computeClippedRectInRootContentsSpace(const LayoutRect& rect, const SecurityOrigin& targetSecurityOrigin, const RenderElement* renderer, std::optional<IntersectionObserverMarginBox> scrollMargin)
+static std::optional<LayoutRect> computeClippedRectInRootContentsSpace(const LayoutRect& rect, const SecurityOrigin& targetSecurityOrigin, Variant<const RenderElement*, const Frame*> rendererOrFrame, std::optional<IntersectionObserverMarginBox> scrollMargin)
 {
+    auto rendererOrFrameSecurityOrigin = WTF::visit(WTF::makeVisitor(
+        [&] (const RenderElement* renderer) { return Ref<const Frame>(renderer->frame())->frameDocumentSecurityOrigin(); },
+        [&] (const Frame* frame) { return frame->frameDocumentSecurityOrigin(); }
+    ), rendererOrFrame);
+
     // targetSecurityOrigin is the security origin of the target (the element that originates the very first rect)
     // Scroll margin should not propagate past the first cross-origin frame in the chain leading to the main frame.
     // e.g given the chain: main frame <- cross-origin frame <- same-origin frame 2 <- same-origin frame 1 <- target
     // then scroll margin is applied to same-origin frame 1/2 but not to cross-origin and main frames.
     // Hence, clear out the scroll margin when we see a cross-origin frame.
-    bool shouldApplyScrollMargin = Ref<const Frame>(renderer->frame())->frameDocumentSecurityOrigin()->isSameOriginDomain(targetSecurityOrigin);
-    if (!shouldApplyScrollMargin)
+    bool isSameOriginDomain = [&] () {
+        if (rendererOrFrameSecurityOrigin)
+            return rendererOrFrameSecurityOrigin->isSameOriginDomain(targetSecurityOrigin);
+
+        return false;
+    }();
+    if (!isSameOriginDomain)
         scrollMargin.reset();
 
-    auto absoluteRects = renderer->computeVisibleRectsInContainer(
-        { rect },
-        &renderer->view(),
-        {
-            .hasPositionFixedDescendant = false,
-            .dirtyRectIsFlipped = false,
-            .descendantNeedsEnclosingIntRect = false,
-            .options = {
-                VisibleRectContext::Option::UseEdgeInclusiveIntersection,
-                VisibleRectContext::Option::ApplyCompositedClips,
-                VisibleRectContext::Option::ApplyCompositedContainerScrolls
-            },
-            .scrollMargin = scrollMargin
-        }
-    );
-    if (!absoluteRects)
+    RefPtr<const Frame> enclosingFrame = WTF::visit(WTF::makeVisitor(
+        [&] (const RenderElement* renderer) { return static_cast<const Frame*>(&renderer->frame()); },
+        [&] (const Frame* frame) { return static_cast<const Frame*>(frame->tree().parent()); }
+    ), rendererOrFrame);
+
+    auto absoluteClippedRect = WTF::visit(WTF::makeVisitor(
+        [&] (const RenderElement* renderer) {
+            auto visibleRects = renderer->computeVisibleRectsInContainer(
+                { rect },
+                &renderer->view(),
+                {
+                    .hasPositionFixedDescendant = false,
+                    .dirtyRectIsFlipped = false,
+                    .descendantNeedsEnclosingIntRect = false,
+                    .options = {
+                        VisibleRectContext::Option::UseEdgeInclusiveIntersection,
+                        VisibleRectContext::Option::ApplyCompositedClips,
+                        VisibleRectContext::Option::ApplyCompositedContainerScrolls
+                    },
+                    .scrollMargin = scrollMargin
+                }
+            );
+
+            return visibleRects.transform([] (auto&& repaintRects) { return repaintRects.clippedOverflowRect; } );
+        },
+        [&] (const Frame* frame) -> std::optional<LayoutRect> {
+            auto visibleRectInParentFrame = enclosingFrame->virtualView()->visibleRectOfChild(*frame);
+            if (!visibleRectInParentFrame)
+                return std::nullopt;
+
+            auto clippedRect = rect;
+            if (!clippedRect.edgeInclusiveIntersect(*visibleRectInParentFrame))
+                return std::nullopt;
+
+            return std::make_optional(clippedRect);
+    }), rendererOrFrame);
+
+    if (!absoluteClippedRect)
         return std::nullopt;
 
-    auto absoluteClippedRect = absoluteRects->clippedOverflowRect;
-    if (renderer->frame().isMainFrame())
+    // If the renderer is in the main frame, there are no more frames to traverse to, so stop here.
+    if (enclosingFrame->isMainFrame())
         return absoluteClippedRect;
 
-    auto frameRect = renderer->view().frameView().layoutViewportRect();
+    // The visible rect we calculated is in the coordinate space of the document content box,
+    // and is what's visible in the iframe's content area (aka the iframe document content box)
+    // But only the iframe's viewport is visible, so clip by the iframe's viewport.
+
+    // Compute the frame's viewport (this is in the coordinate space of the document content box)
+    RefPtr<const FrameView> enclosingFrameView = enclosingFrame->virtualView();
+    ASSERT(enclosingFrameView);
+
+    auto frameRect = enclosingFrameView->layoutViewportRect();
     if (scrollMargin) {
         auto scrollMarginEdges = LayoutBoxExtent {
             LayoutUnit(Style::evaluate<int>(scrollMargin->top(), frameRect.height(), Style::ZoomNeeded { })),
@@ -393,18 +433,18 @@ static std::optional<LayoutRect> computeClippedRectInRootContentsSpace(const Lay
         frameRect.expand(scrollMarginEdges);
     }
 
-    bool intersects = absoluteClippedRect.edgeInclusiveIntersect(frameRect);
-    if (!intersects)
+    if (!absoluteClippedRect->edgeInclusiveIntersect(frameRect))
         return std::nullopt;
 
-    RefPtr ownerRenderer = renderer->frame().ownerRenderer();
-    if (!ownerRenderer)
-        return std::nullopt;
+    absoluteClippedRect = LayoutRect { enclosingFrameView->contentsToView(*absoluteClippedRect) };
 
-    LayoutRect rectInFrameViewSpace { renderer->view().frameView().contentsToView(absoluteClippedRect) };
+    if (RefPtr ownerRenderer = enclosingFrame->ownerRenderer()) {
+        absoluteClippedRect->moveBy(ownerRenderer->contentBoxLocation());
+        return computeClippedRectInRootContentsSpace(*absoluteClippedRect, targetSecurityOrigin, ownerRenderer.get(), scrollMargin);
+    }
 
-    rectInFrameViewSpace.moveBy(ownerRenderer->contentBoxLocation());
-    return computeClippedRectInRootContentsSpace(rectInFrameViewSpace, targetSecurityOrigin, ownerRenderer.get(), WTFMove(scrollMargin));
+    absoluteClippedRect->moveBy(enclosingFrameView->location());
+    return computeClippedRectInRootContentsSpace(*absoluteClippedRect, targetSecurityOrigin, enclosingFrame.get(), WTFMove(scrollMargin));
 }
 
 static FloatRect absoluteToTargetContent(const Frame& frame, FloatRect rootAbsoluteRect)
@@ -419,19 +459,27 @@ static FloatRect absoluteToTargetContent(const Frame& frame, FloatRect rootAbsol
     return rootAbsoluteRect;
 };
 
-auto IntersectionObserver::computeIntersectionState(const IntersectionObserverRegistration& registration, LocalFrameView& frameView, Element& target, ApplyRootMargin applyRootMargin) const -> IntersectionObservationState
+auto IntersectionObserver::computeIntersectionState(const IntersectionObserverRegistration& registration, FrameView& hostFrameView, Element& target, ApplyRootMargin applyRootMargin) const -> IntersectionObservationState
 {
     bool isFirstObservation = !registration.previousThresholdIndex;
 
+    float rootUsedZoom = 1.0;
+    // Only available for explicit root situation.
     RenderBlock* rootRenderer = nullptr;
     RenderElement* targetRenderer = nullptr;
     IntersectionObservationState intersectionState;
 
     auto layoutViewportRectForIntersection = [&] {
-        if (m_includeObscuredInsets == IncludeObscuredInsets::Yes)
-            return frameView.layoutViewportRectIncludingObscuredInsets();
+        if (m_includeObscuredInsets == IncludeObscuredInsets::Yes) {
+            // IncludeObscuredInsets::Yes is only used by ContentVisibilityDocumentState, which
+            // tracks the visibility of an element wrt. its document.
+            // Therefore the intersection observer is guaranteed to be a local and explicit root
+            // observer, so frameView must be local too.
+            // FIXME: looks ugly though?
+            return downcast<LocalFrameView>(hostFrameView).layoutViewportRectIncludingObscuredInsets();
+        }
 
-        return frameView.layoutViewportRect();
+        return hostFrameView.layoutViewportRect();
     };
 
     auto computeRootBounds = [&]() {
@@ -458,16 +506,19 @@ auto IntersectionObserver::computeIntersectionState(const IntersectionObserverRe
             else
                 intersectionState.rootBounds = { FloatPoint(), rootRenderer->size() };
 
+            rootUsedZoom = rootRenderer->style().usedZoom();
+
             return;
         }
 
-        ASSERT(frameView.frame().isMainFrame());
+        ASSERT(hostFrameView.frame().isMainFrame());
         // FIXME: Handle the case of an implicit-root observer that has a target in a different frame tree.
-        if (&targetRenderer->frame().mainFrame() != &frameView.frame())
+        if (&targetRenderer->frame().mainFrame() != &hostFrameView.frame())
             return;
 
         intersectionState.canComputeIntersection = true;
-        rootRenderer = frameView.renderView();
+        // FIXME: this will be explicitly given in the message sent by the root to descendant documents.
+        rootUsedZoom = downcast<LocalFrameView>(hostFrameView).renderView()->style().usedZoom();
         intersectionState.rootBounds = layoutViewportRectForIntersection();
     };
 
@@ -478,8 +529,8 @@ auto IntersectionObserver::computeIntersectionState(const IntersectionObserverRe
     }
 
     if (applyRootMargin == ApplyRootMargin::Yes) {
-        expandRootBoundsWithRootMargin(intersectionState.rootBounds, scrollMarginBox(), rootRenderer->style().usedZoom());
-        expandRootBoundsWithRootMargin(intersectionState.rootBounds, rootMarginBox(), rootRenderer->style().usedZoom());
+        expandRootBoundsWithRootMargin(intersectionState.rootBounds, scrollMarginBox(), rootUsedZoom);
+        expandRootBoundsWithRootMargin(intersectionState.rootBounds, rootMarginBox(), rootUsedZoom);
     }
 
     auto localTargetBounds = [&]() -> LayoutRect {
@@ -537,7 +588,7 @@ auto IntersectionObserver::computeIntersectionState(const IntersectionObserverRe
         // If implicit root, rootLocalIntersectionRect is already in absolute coordinates.
         auto rootAbsoluteIntersectionRect = root() ? rootRenderer->localToAbsoluteQuad(rootLocalIntersectionRect).boundingBox() : rootLocalIntersectionRect;
 
-        if (&targetRenderer->frame() == &rootRenderer->frame())
+        if (rootRenderer && &targetRenderer->frame() == &rootRenderer->frame())
             intersectionState.absoluteIntersectionRect = rootAbsoluteIntersectionRect;
         else
             intersectionState.absoluteIntersectionRect = absoluteToTargetContent(targetRenderer->view().frame(), rootAbsoluteIntersectionRect);
@@ -582,8 +633,8 @@ auto IntersectionObserver::computeIntersectionState(const IntersectionObserverRe
 
 auto IntersectionObserver::updateObservations(const Frame& hostFrame) -> NeedNotify
 {
-    RefPtr frameView = dynamicDowncast<LocalFrameView>(hostFrame.virtualView());
-    if (!frameView)
+    RefPtr hostFrameView = hostFrame.virtualView();
+    if (!hostFrameView)
         return NeedNotify::No;
 
     auto timestamp = nowTimestamp();
@@ -607,7 +658,7 @@ auto IntersectionObserver::updateObservations(const Frame& hostFrame) -> NeedNot
             return false;
         }();
         auto applyRootMargin = isSameOriginObservation ? ApplyRootMargin::Yes : ApplyRootMargin::No;
-        auto intersectionState = computeIntersectionState(registration, *frameView, *target, applyRootMargin);
+        auto intersectionState = computeIntersectionState(registration, *hostFrameView, *target, applyRootMargin);
 
         if (intersectionState.observationChanged) {
             FloatRect targetBoundingClientRect;
@@ -619,7 +670,16 @@ auto IntersectionObserver::updateObservations(const Frame& hostFrame) -> NeedNot
 
                 RefPtr targetFrameView = target->document().view();
                 targetBoundingClientRect = targetFrameView->absoluteToClientRect(*intersectionState.absoluteTargetRect, target->renderer()->style().usedZoom());
-                clientRootBounds = frameView->absoluteToLayoutViewportRect(*intersectionState.absoluteRootBounds);
+
+                {
+                    // Replica of
+                    // hostFrame->absoluteToLayoutViewportRect(*intersectionState.absoluteRootBounds)
+                    clientRootBounds = *intersectionState.absoluteRootBounds;
+                    // FIXME: this will be explicitly given in the message sent by the root to descendant documents.
+                    clientRootBounds.scale(1 / downcast<LocalFrame>(hostFrame).frameScaleFactor());
+                    clientRootBounds.moveBy(-hostFrameView->layoutViewportRect().location());
+                }
+
                 if (intersectionState.isIntersecting) {
                     ASSERT(intersectionState.absoluteIntersectionRect);
                     clientIntersectionRect = targetFrameView->absoluteToClientRect(*intersectionState.absoluteIntersectionRect, target->renderer()->style().usedZoom());

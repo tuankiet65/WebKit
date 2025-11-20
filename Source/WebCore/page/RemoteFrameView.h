@@ -46,6 +46,9 @@ public:
 
     WEBCORE_EXPORT void setFrameRectWithoutSync(const IntRect&);
 
+    WEBCORE_EXPORT LayoutRect layoutViewportRect() const final;
+    std::optional<LayoutRect> visibleRectOfChild(const Frame&) const final;
+
 private:
     WEBCORE_EXPORT RemoteFrameView(RemoteFrame&);
 

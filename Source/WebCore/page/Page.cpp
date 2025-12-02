@@ -2198,6 +2198,45 @@ unsigned Page::renderingUpdateCount() const
     return m_renderingUpdateCount;
 }
 
+static void updateFrameLayoutInfo(const HashSet<WeakRef<LocalFrame>>& rootFrames)
+{
+    ALWAYS_LOG_WITH_STREAM(stream << "[updateFrameLayoutInfo] entry");
+
+    for (WeakRef rootFrameWeakRef : rootFrames) {
+        RefPtr rootFrame = rootFrameWeakRef.get();
+        if (!rootFrame)
+            continue;
+
+        CheckedPtr frameView = rootFrame->view();
+        ASSERT(frameView);
+
+        ALWAYS_LOG_WITH_STREAM(stream << "[updateFrameLayoutInfo] got root frame " << rootFrame.get() << " with frame view " << frameView.get());
+
+        ALWAYS_LOG_WITH_STREAM(stream << "[updateFrameLayoutInfo] call updateLayoutViewportRect on frame view " << frameView.get());
+        frameView->updateLayoutViewportRect();
+        ALWAYS_LOG_WITH_STREAM(stream << "[updateFrameLayoutInfo] end updateLayoutViewportRect on frame view " << frameView.get());
+
+        {
+            ALWAYS_LOG_WITH_STREAM(stream << "[updateFrameLayoutInfo] collect child visible rect in frame view " << frameView.get());
+
+            HashMap<FrameIdentifier, std::optional<LayoutRect>> visibleRectMap;
+
+            for (RefPtr child = rootFrame->tree().firstChild(); child; child = child->tree().traverseNextSkippingChildren()) {
+                auto visibleRect = frameView->visibleRectOfChild(*child.get());
+                ALWAYS_LOG_WITH_STREAM(stream << "[updateFrameLayoutInfo] at child " << child.get() << " visible rect " << visibleRect);
+
+                visibleRectMap.add(child->frameID(), visibleRect);
+            }
+
+            ALWAYS_LOG_WITH_STREAM(stream << "[updateFrameLayoutInfo] finish collect child visible rect in frame view " << frameView.get() << ", now broadcasting");
+            rootFrame->loader().client().broadcastChildrenFrameVisibleRectMapToOtherProcesses(WTFMove(visibleRectMap));
+            ALWAYS_LOG_WITH_STREAM(stream << "[updateFrameLayoutInfo] end broadcast");
+        }
+    }
+
+    ALWAYS_LOG_WITH_STREAM(stream << "[updateFrameLayoutInfo] exit");
+}
+
 // https://html.spec.whatwg.org/multipage/webappapis.html#update-the-rendering
 void Page::updateRendering()
 {
@@ -2331,6 +2370,12 @@ void Page::updateRendering()
     runProcessingStep(RenderingUpdateStep::PerformPendingViewTransitions, [] (Document& document) {
         document.performPendingViewTransitions();
     });
+
+
+    if (settings().siteIsolationEnabled()) {
+        ALWAYS_LOG_WITH_STREAM(stream << "[Page::updateRendering] site isolation enabled, updating frame layout info");
+        updateFrameLayoutInfo(rootFrames());
+    }
 
     runProcessingStep(RenderingUpdateStep::IntersectionObservations, [] (Document& document) {
         document.updateIntersectionObservations();

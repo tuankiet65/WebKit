@@ -133,12 +133,12 @@ public:
     {prefix}SyncClient() = default;
     virtual ~{prefix}SyncClient() = default;
 
-    virtual void broadcastAll{prefix}SyncDataToOtherProcesses({prefix}SyncData&) {{ }}
+    WEBCORE_EXPORT virtual void broadcastAll{prefix}SyncDataToOtherProcesses({prefix}SyncData&) {{ }}
 """
 
 _process_sync_client_header_suffix = """
 protected:
-    virtual void broadcast{prefix}SyncDataToOtherProcesses(const {prefix}SyncSerializationData&) {{ }}
+    WEBCORE_EXPORT virtual void broadcast{prefix}SyncDataToOtherProcesses(const {prefix}SyncSerializationData&) {{ }}
 }};
 
 }} // namespace WebCore
@@ -160,7 +160,7 @@ def generate_process_sync_client_header(prefix, synched_datas):
     for data in synched_datas:
         if data.conditional is not None:
             result.append('#if %s' % data.conditional)
-        result.append('    void broadcast%sToOtherProcesses(const %s&);' % (data.name, data.fully_qualified_type))
+        result.append('    WEBCORE_EXPORT void broadcast%sToOtherProcesses(const %s&);' % (data.name, data.fully_qualified_type))
         if data.conditional is not None:
             result.append('#endif')
 

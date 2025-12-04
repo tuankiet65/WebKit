@@ -44,6 +44,8 @@ public:
     void writeRenderTreeAsText(TextStream&, OptionSet<RenderAsTextFlag>) override;
     RemoteFrame& frame() const final { return m_frame; }
 
+    WEBCORE_EXPORT void setFrameRectWithoutSync(const IntRect&);
+
 private:
     WEBCORE_EXPORT RemoteFrameView(RemoteFrame&);
 

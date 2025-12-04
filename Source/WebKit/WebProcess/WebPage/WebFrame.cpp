@@ -422,6 +422,8 @@ void WebFrame::loadDidCommitInAnotherProcess(std::optional<WebCore::LayerHosting
     auto newFrame = ownerElement
         ? WebCore::RemoteFrame::createSubframeWithContentsInAnotherProcess(*corePage, WTFMove(clientCreator), m_frameID, *ownerElement, layerHostingContextIdentifier, WTFMove(frameTreeSyncData))
         : parent ? WebCore::RemoteFrame::createSubframe(*corePage, WTFMove(clientCreator), m_frameID, *parent, nullptr, WTFMove(frameTreeSyncData), WebCore::Frame::AddToFrameTree::No) : WebCore::RemoteFrame::createMainFrame(*corePage, WTFMove(clientCreator), m_frameID, nullptr, WTFMove(frameTreeSyncData));
+    m_coreFrame = newFrame.get();
+
     if (parent)
         parent->tree().replaceChild(*localFrame, newFrame);
     else
@@ -431,8 +433,6 @@ void WebFrame::loadDidCommitInAnotherProcess(std::optional<WebCore::LayerHosting
     newFrame->tree().setSpecifiedName(localFrame->tree().specifiedName());
     if (ownerRenderer)
         ownerRenderer->setWidget(newFrame->view());
-
-    m_coreFrame = newFrame.get();
 
     if (corePage->focusController().focusedFrame() == localFrame.get())
         corePage->focusController().setFocusedFrame(newFrame.ptr(), WebCore::BroadcastFocusedFrame::No);
@@ -470,8 +470,8 @@ void WebFrame::createProvisionalFrame(ProvisionalFrameCreationParameters&& param
 
     if (parameters.layerHostingContextIdentifier)
         setLayerHostingContextIdentifier(*parameters.layerHostingContextIdentifier);
-    if (parameters.initialSize)
-        updateLocalFrameSize(localFrame, *parameters.initialSize);
+    if (parameters.initialRect)
+        updateLocalFrameRect(localFrame, *parameters.initialRect);
 }
 
 void WebFrame::destroyProvisionalFrame()
@@ -1202,30 +1202,31 @@ String WebFrame::mimeTypeForResourceWithURL(const URL& url) const
     return String();
 }
 
-void WebFrame::updateRemoteFrameSize(WebCore::IntSize size)
-{
-    send(Messages::WebFrameProxy::UpdateRemoteFrameSize(size));
-}
-
-void WebFrame::updateFrameSize(WebCore::IntSize newSize)
+void WebFrame::updateFrameRectFromRemote(WebCore::IntRect newRect)
 {
     ASSERT(m_page->corePage()->settings().siteIsolationEnabled());
-    RefPtr localFrame = coreLocalFrame();
-    if (!localFrame)
-        return;
-    updateLocalFrameSize(*localFrame, newSize);
+    if (RefPtr localFrame = coreLocalFrame())
+        updateLocalFrameRect(*localFrame, newRect);
+    else {
+        RefPtr remoteFrame = coreRemoteFrame();
+        RefPtr remoteFrameView = remoteFrame->view();
+
+        if (remoteFrameView->frameRect() != newRect)
+            remoteFrameView->setFrameRectWithoutSync(newRect);
+    }
 }
 
-void WebFrame::updateLocalFrameSize(WebCore::LocalFrame& localFrame, WebCore::IntSize newSize)
+void WebFrame::updateLocalFrameRect(WebCore::LocalFrame& localFrame, WebCore::IntRect newRect)
 {
     RefPtr frameView = localFrame.view();
     if (!frameView)
         return;
 
-    if (frameView->size() == newSize)
+    if (frameView->frameRect() == newRect)
         return;
 
-    frameView->resize(newSize);
+    frameView->setFrameRect(newRect);
+
 #if PLATFORM(IOS_FAMILY)
     // FIXME: This ensures cross-site iframe render correctly;
     // it should be removed after rdar://122429810 is fixed.

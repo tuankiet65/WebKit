@@ -82,6 +82,9 @@ public:
 
     ~IntersectionObserver();
 
+    enum class Type { Local, Remote };
+    Type type() const { return m_type; }
+
     Document* trackingDocument() const;
 
     ContainerNode* root() const { return m_root.get(); }
@@ -138,6 +141,8 @@ private:
 
     enum class ApplyRootMargin : bool { No, Yes };
     IntersectionObservationState computeIntersectionState(const IntersectionObserverRegistration&, FrameView&, Element& target, ApplyRootMargin) const;
+
+    Type m_type { Type::Local };
 
     WeakPtr<Document, WeakPtrImplWithEventTargetData> m_implicitRootDocument;
     WeakPtr<ContainerNode, WeakPtrImplWithEventTargetData> m_root;

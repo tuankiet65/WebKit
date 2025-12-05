@@ -2883,6 +2883,8 @@ public:
     RefPtr<WebDeviceOrientationUpdateProviderProxy> webDeviceOrientationUpdateProviderProxy();
 #endif
 
+    void updateRemoteIntersectionObserversInOtherWebProcesses(IPC::Connection&);
+
 private:
     WebPageProxy(PageClient&, WebProcessProxy&, Ref<API::PageConfiguration>&&);
     void platformInitialize();

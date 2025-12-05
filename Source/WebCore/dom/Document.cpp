@@ -993,7 +993,7 @@ void Document::commonTeardown()
     m_documentFragmentForInnerOuterHTML = nullptr;
     m_frameMemoryMonitor = nullptr;
 
-    auto intersectionObservers = m_intersectionObservers;
+    auto intersectionObservers = m_localIntersectionObservers;
     for (auto& weakIntersectionObserver : intersectionObservers) {
         if (RefPtr intersectionObserver = weakIntersectionObserver.get())
             intersectionObserver->disconnect();
@@ -10446,18 +10446,80 @@ void Document::scheduleRenderingUpdate(OptionSet<RenderingUpdateStep> requestedS
 
 void Document::addIntersectionObserver(IntersectionObserver& observer)
 {
-    ASSERT(m_intersectionObservers.find(&observer) == notFound);
-    m_intersectionObservers.append(observer);
+    ASSERT(!m_localIntersectionObservers.contains(&observer));
+    ASSERT(!m_remoteIntersectionObservers.contains(&observer));
+
+    switch (observer.type()) {
+    case IntersectionObserver::Type::Local:
+        m_localIntersectionObservers.append(observer);
+        break;
+
+    case IntersectionObserver::Type::Remote:
+        m_remoteIntersectionObservers.append(observer);
+        break;
+    }
 }
 
 void Document::removeIntersectionObserver(IntersectionObserver& observer)
 {
-    m_intersectionObservers.removeFirst(&observer);
+    bool removed = false;
+
+    switch (observer.type()) {
+    case IntersectionObserver::Type::Local:
+        ASSERT(!m_remoteIntersectionObservers.contains(&observer));
+        removed = m_localIntersectionObservers.removeFirst(&observer);
+        break;
+
+    case IntersectionObserver::Type::Remote:
+        ASSERT(!m_localIntersectionObservers.contains(&observer));
+        removed = m_remoteIntersectionObservers.removeFirst(&observer);
+        break;
+    }
+
+    ASSERT_UNUSED(removed, removed);
 }
 
-void Document::updateIntersectionObservations()
+void Document::updateRemoteIntersectionObservers()
 {
-    updateIntersectionObservations(m_intersectionObservers);
+    RefPtr page = this->page();
+    if (!page)
+        return;
+
+    RefPtr topFrame = this->page()->mainFrame();
+    if (!topFrame)
+        return;
+
+    Vector<WeakPtr<IntersectionObserver>> intersectionObserversWithPendingNotifications;
+
+    for (auto& weakObserver : m_remoteIntersectionObservers) {
+        RefPtr observer = weakObserver.get();
+        if (!observer)
+            continue;
+
+        auto needNotify = observer->updateObservations(*topFrame);
+        if (needNotify == IntersectionObserver::NeedNotify::Yes)
+            intersectionObserversWithPendingNotifications.append(observer);
+    }
+
+    for (auto& weakObserver : intersectionObserversWithPendingNotifications) {
+        if (RefPtr observer = weakObserver.get())
+            observer->notify();
+    }
+}
+
+void Document::updateLocalIntersectionObservers()
+{
+    updateIntersectionObservations(m_localIntersectionObservers);
+    updateRemoteIntersectionObservers();
+
+    if (m_frame && m_frame->isMainFrame()) {
+        RefPtr page = protectedPage();
+        if (page) {
+            auto& pageChromeClient = page->chrome().client();
+            // FIXME: updateIntersectionObservers doesn't update if layout is pending - in that case we should not update remote intersection observers?
+            pageChromeClient.updateRemoteIntersectionObserversInOtherWebProcesses();
+        }
+    }
 }
 
 void Document::updateIntersectionObservations(const Vector<WeakPtr<IntersectionObserver>>& intersectionObservers)

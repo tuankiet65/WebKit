@@ -186,8 +186,14 @@ IntersectionObserver::IntersectionObserver(Document& document, Ref<IntersectionO
         auto& observerData = downcast<Element>(*root).ensureIntersectionObserverData();
         observerData.observers.append(*this);
     } else if (auto* frame = document.frame()) {
-        if (auto* localFrame = dynamicDowncast<LocalFrame>(frame->mainFrame()))
+        if (auto* localFrame = dynamicDowncast<LocalFrame>(frame->mainFrame())) {
+            // implicitRootDocument is in same process
             m_implicitRootDocument = localFrame->document();
+        } else {
+            // Main frame's document is in different process, so the current document tracks it.
+            m_type = Type::Remote;
+            m_implicitRootDocument = document;
+        }
     }
 
     std::ranges::sort(m_thresholds);
@@ -257,6 +263,7 @@ void IntersectionObserver::observe(Element& target)
     RefPtr document = trackingDocument();
     if (!hadObservationTargets)
         document->addIntersectionObserver(*this);
+    // FIXME: make this work with local/remote
     document->scheduleInitialIntersectionObservationUpdate();
 }
 
@@ -488,9 +495,6 @@ auto IntersectionObserver::computeIntersectionState(const IntersectionObserverRe
             return;
 
         if (root()) {
-            if (trackingDocument() != &target.document())
-                return;
-
             if (!root()->renderer())
                 return;
 
@@ -511,14 +515,12 @@ auto IntersectionObserver::computeIntersectionState(const IntersectionObserverRe
             return;
         }
 
-        ASSERT(hostFrameView.frame().isMainFrame());
-        // FIXME: Handle the case of an implicit-root observer that has a target in a different frame tree.
-        if (&targetRenderer->frame().mainFrame() != &hostFrameView.frame())
-            return;
-
         intersectionState.canComputeIntersection = true;
         // FIXME: this will be explicitly given in the message sent by the root to descendant documents.
-        rootUsedZoom = downcast<LocalFrameView>(hostFrameView).renderView()->style().usedZoom();
+        if (is<LocalFrameView>(hostFrameView))
+            rootUsedZoom = downcast<LocalFrameView>(hostFrameView).renderView()->style().usedZoom();
+        else
+            rootUsedZoom = 1.0; // FIXME: fill this in.
         intersectionState.rootBounds = layoutViewportRectForIntersection();
     };
 
@@ -675,8 +677,10 @@ auto IntersectionObserver::updateObservations(const Frame& hostFrame) -> NeedNot
                     // Replica of
                     // hostFrame->absoluteToLayoutViewportRect(*intersectionState.absoluteRootBounds)
                     clientRootBounds = *intersectionState.absoluteRootBounds;
-                    // FIXME: this will be explicitly given in the message sent by the root to descendant documents.
-                    clientRootBounds.scale(1 / downcast<LocalFrame>(hostFrame).frameScaleFactor());
+                    if (is<LocalFrame>(hostFrame))
+                        clientRootBounds.scale(1 / downcast<LocalFrame>(hostFrame).frameScaleFactor());
+                    else
+                        ; // FIXME: do something here
                     clientRootBounds.moveBy(-hostFrameView->layoutViewportRect().location());
                 }
 

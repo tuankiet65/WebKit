@@ -1758,9 +1758,19 @@ public:
 
     void addIntersectionObserver(IntersectionObserver&);
     void removeIntersectionObserver(IntersectionObserver&);
-    unsigned numberOfIntersectionObservers() const { return m_intersectionObservers.size(); }
-    void updateIntersectionObservations();
+    unsigned numberOfIntersectionObservers() const { return m_localIntersectionObservers.size(); }
+
+    // This is called when a remote Document updates its rendering, so intersection observers
+    // that have its root as the remote Document can update. The remote Document will make an IPC
+    // call to other documents to update it.
+    WEBCORE_EXPORT void updateRemoteIntersectionObservers();
+
+    // This is called when this Docuemnt updates its rendering, so intersection observers that have
+    // root as this document (or an element in this document) can update.
+    void updateLocalIntersectionObservers();
+
     void updateIntersectionObservations(const Vector<WeakPtr<IntersectionObserver>>&);
+
     void scheduleInitialIntersectionObservationUpdate();
     IntersectionObserverData& ensureIntersectionObserverData();
     IntersectionObserverData* intersectionObserverDataIfExists() { return m_intersectionObserverData.get(); }
@@ -2459,7 +2469,15 @@ private:
 
     WeakHashSet<HTMLImageElement, WeakPtrImplWithEventTargetData> m_dynamicMediaQueryDependentImages;
 
-    Vector<WeakPtr<IntersectionObserver>> m_intersectionObservers;
+    // Intersection observers that the root is local to this document
+    Vector<WeakPtr<IntersectionObserver>> m_localIntersectionObservers;
+
+    // Intersection observers that the root is remote (in a different process)
+    // With the way intersection observers is designed, the only possible scenario
+    // is if the intersection observer has the root as the main frame's document,
+    // and it's in a different process.
+    Vector<WeakPtr<IntersectionObserver>> m_remoteIntersectionObservers;
+
     Timer m_intersectionObserversInitialUpdateTimer;
     // This is only non-null when this document is an explicit root.
     const std::unique_ptr<IntersectionObserverData> m_intersectionObserverData;

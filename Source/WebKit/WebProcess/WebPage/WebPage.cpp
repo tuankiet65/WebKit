@@ -10373,6 +10373,16 @@ void WebPage::hideCaptionDisplaySettingsPreview(HTMLMediaElementIdentifier ident
 }
 #endif
 
+void WebPage::updateRemoteIntersectionObservers()
+{
+    if (RefPtr page = m_page) {
+        for (auto rootFrame : page->rootFrames()) {
+            if (RefPtr document = rootFrame->protectedDocument())
+                document->updateRemoteIntersectionObservers();
+        }
+    }
+}
+
 } // namespace WebKit
 
 #undef WEBPAGE_RELEASE_LOG

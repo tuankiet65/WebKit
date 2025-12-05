@@ -930,4 +930,6 @@ messages -> WebPage WantsAsyncDispatchMessage {
     ShowCaptionDisplaySettingsPreview(WebCore::MediaPlayerClientIdentifier identifier)
     HideCaptionDisplaySettingsPreview(WebCore::MediaPlayerClientIdentifier identifier)
 #endif
+
+    UpdateRemoteIntersectionObservers();
 }

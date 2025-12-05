@@ -2127,6 +2127,8 @@ public:
     void hideCaptionDisplaySettingsPreview(WebCore::HTMLMediaElementIdentifier);
 #endif
 
+    void updateRemoteIntersectionObservers();
+
 private:
     WebPage(WebCore::PageIdentifier, WebPageCreationParameters&&);
 

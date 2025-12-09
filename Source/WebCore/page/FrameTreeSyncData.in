@@ -30,6 +30,7 @@ FrameCanCreatePaymentSession : bool
 FrameDocumentSecurityOrigin : RefPtr<WebCore::SecurityOrigin> [Headers=<WebCore/SecurityOrigin.h>]
 FrameURLProtocol : String [Headers=<wtf/text/WTFString.h>]
 FrameRect : WebCore::IntRect [Headers=<WebCore/IntRect.h>]
+FrameScrollPosition : WebCore::ScrollPosition [Headers=<WebCore/ScrollTypes.h>]
 
 # Layout information for Intersection Observer
 

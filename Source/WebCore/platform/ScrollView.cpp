@@ -956,10 +956,18 @@ IntRect ScrollView::contentsToView(IntRect rect) const
 
 FloatRect ScrollView::contentsToView(FloatRect rect) const
 {
-    if (delegatesScrollingToNativeView())
-        return rect;
+    LOG_WITH_STREAM(IntersectionObserver, stream << "[ScrollView::contentsToView] entry, rect = " << rect);
+    LOG_WITH_STREAM(IntersectionObserver, stream << "[ScrollView::contentsToView] document scroll position relative to view origin = " << documentScrollPositionRelativeToViewOrigin());
 
+    if (delegatesScrollingToNativeView()) {
+        LOG_WITH_STREAM(IntersectionObserver, stream << "[ScrollView::contentsToView] scrolling is deleted to native view, returning rect");
+        return rect;
+    }
+
+    LOG_WITH_STREAM(IntersectionObserver, stream << "[ScrollView::contentsToView] adjust rect by document scroll position relative to view origin");
     rect.moveBy(-documentScrollPositionRelativeToViewOrigin());
+
+    LOG_WITH_STREAM(IntersectionObserver, stream << "[ScrollView::contentsToView] exit");
     return rect;
 }
 

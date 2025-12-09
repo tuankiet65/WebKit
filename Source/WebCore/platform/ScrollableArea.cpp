@@ -796,6 +796,8 @@ IntRect ScrollableArea::visibleContentRectIncludingScrollbars(VisibleContentRect
 
 IntRect ScrollableArea::visibleContentRectInternal(VisibleContentRectIncludesScrollbars scrollbarInclusion, VisibleContentRectBehavior) const
 {
+    LOG_WITH_STREAM(IntersectionObserver, stream << "[ScrollableArea::visibleContentRectInternal] entry");
+
     int verticalScrollbarWidth = 0;
     int horizontalScrollbarHeight = 0;
 

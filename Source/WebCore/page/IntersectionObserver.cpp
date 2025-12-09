@@ -580,30 +580,70 @@ auto IntersectionObserver::computeIntersectionState(const IntersectionObserverRe
         return computeClippedRectInRootContentsSpace(localTargetBounds, target.document().securityOrigin(), targetRenderer, scrollMarginBox());
     }();
 
+    // intersectionState.rootBounds: box of the root, (0, 0) is top left of root ("local")
+    // rootRelativeTargetRect: visible part of target in root, (0, 0) is top left of root ("local")
+
     auto rootLocalIntersectionRect = intersectionState.rootBounds;
     intersectionState.isIntersecting = rootRelativeTargetRect && rootLocalIntersectionRect.edgeInclusiveIntersect(*rootRelativeTargetRect);
+    
+    // rootLocalIntersectionRect: visible part of target in root, (0, 0) is top left of root
 
-    if (isFirstObservation || intersectionState.isIntersecting)
-        intersectionState.absoluteTargetRect = targetRenderer->localToAbsoluteQuad(FloatRect(localTargetBounds)).boundingBox();
+    if (isFirstObservation || intersectionState.isIntersecting) {
+        // absoluteTargetRect: target box, (0, 0) is top left of target's document
+        auto absoluteTargetRect = targetRenderer->localToAbsoluteQuad(FloatRect(localTargetBounds)).boundingBox();
+        LOG_WITH_STREAM(IntersectionObserver, stream << "[IntersectionObserver::computeIntersectionState] localTargetBounds = " << localTargetBounds << " absoluteTargetRect = " << absoluteTargetRect);
 
-    if (intersectionState.isIntersecting) {
-        // If implicit root, rootLocalIntersectionRect is already in absolute coordinates.
-        auto rootAbsoluteIntersectionRect = root() ? rootRenderer->localToAbsoluteQuad(rootLocalIntersectionRect).boundingBox() : rootLocalIntersectionRect;
-
-        if (rootRenderer && &targetRenderer->frame() == &rootRenderer->frame())
-            intersectionState.absoluteIntersectionRect = rootAbsoluteIntersectionRect;
-        else
-            intersectionState.absoluteIntersectionRect = absoluteToTargetContent(targetRenderer->view().frame(), rootAbsoluteIntersectionRect);
-
-        intersectionState.isIntersecting = intersectionState.absoluteIntersectionRect->edgeInclusiveIntersect(*intersectionState.absoluteTargetRect);
+        intersectionState.absoluteTargetRect = absoluteTargetRect;
+        LOG_WITH_STREAM(IntersectionObserver, stream << "[IntersectionObserver::computeIntersectionState] intersectionState.absoluteTargetRect after set = " << intersectionState.absoluteTargetRect);
     }
 
     if (intersectionState.isIntersecting) {
+        LOG_WITH_STREAM(IntersectionObserver, stream << "[IntersectionObserver::computeIntersectionState] intersectionState.isIntersecting is true (1)");
+
+        // rootAbsoluteIntersectionRect: visible part of target in root, (0, 0) is top left of root's document
+        // If implicit root, top left of root is the same as top left of root's document
+        auto rootAbsoluteIntersectionRect = root() ? rootRenderer->localToAbsoluteQuad(rootLocalIntersectionRect).boundingBox() : rootLocalIntersectionRect;
+        LOG_WITH_STREAM(IntersectionObserver, stream << "[IntersectionObserver::computeIntersectionState] rootAbsoluteIntersectionRect = " << rootAbsoluteIntersectionRect);
+
+        if (rootRenderer && &targetRenderer->frame() == &rootRenderer->frame()) {
+            LOG_WITH_STREAM(IntersectionObserver, stream << "[IntersectionObserver::computeIntersectionState] there's a root renderer, and root/target is in the same frame");
+            intersectionState.absoluteIntersectionRect = rootAbsoluteIntersectionRect;
+        } else {
+
+            // Take a rectangle in the absolute space ((0, 0) is document) and compute the 
+            LOG_WITH_STREAM(IntersectionObserver, stream << "[IntersectionObserver::computeIntersectionState] root/target is in different frame");
+
+            // LOG_WITH_STREAM(IntersectionObserver, stream << "[IntersectionObserver::computeIntersectionState] calling hostFrameView.contentsToView(rootAbsoluteIntersectionRect) ");
+            // auto rootViewIntersectionRect = hostFrameView.contentsToView(rootAbsoluteIntersectionRect);
+            // LOG_WITH_STREAM(IntersectionObserver, stream << "[IntersectionObserver::computeIntersectionState] end calling hostFrameView.contentsToView(rootAbsoluteIntersectionRect) ");
+
+            // LOG_WITH_STREAM(IntersectionObserver, stream << "[IntersectionObserver::computeIntersectionState] rootViewIntersectionRect = " << rootViewIntersectionRect);
+
+            intersectionState.absoluteIntersectionRect = absoluteToTargetContent(targetRenderer->view().frame(), rootAbsoluteIntersectionRect);
+        }
+
+        LOG_WITH_STREAM(IntersectionObserver, stream << "[IntersectionObserver::computeIntersectionState] intersectionState.absoluteIntersectionRect = " << intersectionState.absoluteIntersectionRect);
+
+        intersectionState.isIntersecting = intersectionState.absoluteIntersectionRect->edgeInclusiveIntersect(*intersectionState.absoluteTargetRect);
+
+        LOG_WITH_STREAM(IntersectionObserver, stream << "[IntersectionObserver::computeIntersectionState] intersectionState.isIntersecting = " << intersectionState.isIntersecting);
+        LOG_WITH_STREAM(IntersectionObserver, stream << "[IntersectionObserver::computeIntersectionState] intersectionState.absoluteIntersectionRect after edgeInclusiveIntersect(*intersectionState.absolueTargetRect) = " << intersectionState.absoluteIntersectionRect);
+    } else {
+        LOG_WITH_STREAM(IntersectionObserver, stream << "[IntersectionObserver::computeIntersectionState] intersectionState.isIntersecting is false (1)");
+    }
+
+    if (intersectionState.isIntersecting) {
+        LOG_WITH_STREAM(IntersectionObserver, stream << "[IntersectionObserver::computeIntersectionState] intersectionState.isIntersecting is true (2)");
+
         float absTargetArea = intersectionState.absoluteTargetRect->area();
+        LOG_WITH_STREAM(IntersectionObserver, stream << "[IntersectionObserver::computeIntersectionState] absTargetArea = " << absTargetArea);
+
         if (absTargetArea)
             intersectionState.intersectionRatio = intersectionState.absoluteIntersectionRect->area() / absTargetArea;
         else
             intersectionState.intersectionRatio = 1;
+
+        LOG_WITH_STREAM(IntersectionObserver, stream << "[IntersectionObserver::computeIntersectionState] intersectionState.intersectionRatio = " << intersectionState.intersectionRatio);
 
         size_t thresholdIndex = 0;
         for (auto threshold : thresholds()) {
@@ -613,6 +653,8 @@ auto IntersectionObserver::computeIntersectionState(const IntersectionObserverRe
         }
 
         intersectionState.thresholdIndex = thresholdIndex;
+    } else {
+        LOG_WITH_STREAM(IntersectionObserver, stream << "[IntersectionObserver::computeIntersectionState] intersectionState.isIntersecting is false (2)");
     }
 
     intersectionState.observationChanged = isFirstObservation || intersectionState.thresholdIndex != registration.previousThresholdIndex;

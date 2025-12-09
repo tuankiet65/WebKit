@@ -1300,8 +1300,18 @@ void WebPage::frameTreeSyncDataChangedInAnotherProcess(FrameIdentifier frameID, 
     if (coreFrame) {
         coreFrame->updateFrameTreeSyncData(data);
 
-        if (data.type == FrameTreeSyncDataType::FrameRect)
+        switch (data.type) {
+        case FrameTreeSyncDataType::FrameRect:
             frame->updateFrameRectFromRemote(coreFrame->frameTreeSyncData().frameRect);
+            break;
+        
+        case FrameTreeSyncDataType::FrameScrollPosition:
+            coreFrame->virtualView()->scrollTo(coreFrame->frameTreeSyncData().frameScrollPosition);
+            break;
+
+        default:
+            break;
+        }
     }
 }
 

@@ -454,6 +454,18 @@ static std::optional<LayoutRect> computeClippedRectInRootContentsSpace(const Lay
     return computeClippedRectInRootContentsSpace(*absoluteClippedRect, targetSecurityOrigin, enclosingFrame.get(), WTFMove(scrollMargin));
 }
 
+static FloatRect absoluteToTargetContent(const Frame& frame, FloatRect rootAbsoluteRect)
+{
+    if (RefPtr parentFrame = frame.tree().parent()) {
+        auto rect = absoluteToTargetContent(*parentFrame, rootAbsoluteRect);
+        rect.moveBy(frame.virtualView()->documentScrollPositionRelativeToViewOrigin());
+        rect.moveBy(-frame.virtualView()->location());
+        return rect;
+    }
+
+    return rootAbsoluteRect;
+};
+
 auto IntersectionObserver::computeIntersectionState(const IntersectionObserverRegistration& registration, FrameView& hostFrameView, Element& target, ApplyRootMargin applyRootMargin) const -> IntersectionObservationState
 {
     bool isFirstObservation = !registration.previousThresholdIndex;
@@ -580,10 +592,8 @@ auto IntersectionObserver::computeIntersectionState(const IntersectionObserverRe
 
         if (rootRenderer && &targetRenderer->frame() == &rootRenderer->frame())
             intersectionState.absoluteIntersectionRect = rootAbsoluteIntersectionRect;
-        else {
-            auto rootViewIntersectionRect = hostFrameView.contentsToView(rootAbsoluteIntersectionRect);
-            intersectionState.absoluteIntersectionRect = targetRenderer->view().frameView().rootViewToContents(rootViewIntersectionRect);
-        }
+        else
+            intersectionState.absoluteIntersectionRect = absoluteToTargetContent(targetRenderer->view().frame(), rootAbsoluteIntersectionRect);
 
         intersectionState.isIntersecting = intersectionState.absoluteIntersectionRect->edgeInclusiveIntersect(*intersectionState.absoluteTargetRect);
     }

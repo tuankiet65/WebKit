@@ -422,6 +422,8 @@ void WebFrame::loadDidCommitInAnotherProcess(std::optional<WebCore::LayerHosting
     auto newFrame = ownerElement
         ? WebCore::RemoteFrame::createSubframeWithContentsInAnotherProcess(*corePage, WTFMove(clientCreator), m_frameID, *ownerElement, layerHostingContextIdentifier, WTFMove(frameTreeSyncData))
         : parent ? WebCore::RemoteFrame::createSubframe(*corePage, WTFMove(clientCreator), m_frameID, *parent, nullptr, WTFMove(frameTreeSyncData), WebCore::Frame::AddToFrameTree::No) : WebCore::RemoteFrame::createMainFrame(*corePage, WTFMove(clientCreator), m_frameID, nullptr, WTFMove(frameTreeSyncData));
+    m_coreFrame = newFrame.get();
+
     if (parent)
         parent->tree().replaceChild(*localFrame, newFrame);
     else
@@ -431,8 +433,6 @@ void WebFrame::loadDidCommitInAnotherProcess(std::optional<WebCore::LayerHosting
     newFrame->tree().setSpecifiedName(localFrame->tree().specifiedName());
     if (ownerRenderer)
         ownerRenderer->setWidget(newFrame->view());
-
-    m_coreFrame = newFrame.get();
 
     if (corePage->focusController().focusedFrame() == localFrame.get())
         corePage->focusController().setFocusedFrame(newFrame.ptr(), WebCore::BroadcastFocusedFrame::No);

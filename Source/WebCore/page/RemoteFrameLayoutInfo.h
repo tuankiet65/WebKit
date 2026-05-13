@@ -25,6 +25,7 @@
 
 #pragma once
 
+#include <WebCore/AffineTransform.h>
 #include <WebCore/LayoutRect.h>
 
 namespace WebCore {
@@ -48,6 +49,8 @@ struct RemoteFrameLayoutInfo {
 
     // RenderStyle::usedZoom of the owner renderer of the frame.
     float usedZoom;
+
+    AffineTransform accumulatedTransformFromView;
 
     OptionSet<FrameOwnerElementAppearance> ownerElementAppearance;
 };

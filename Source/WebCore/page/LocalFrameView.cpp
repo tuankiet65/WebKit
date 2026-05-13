@@ -138,6 +138,7 @@
 #include "TextIterator.h"
 #include "TextResourceDecoder.h"
 #include "TiledBacking.h"
+#include "TransformState.h"
 #include "VelocityData.h"
 #include "VisualViewport.h"
 #include "WheelEventTestMonitor.h"
@@ -2170,6 +2171,27 @@ OptionSet<FrameOwnerElementAppearance> LocalFrameView::appearanceOfOwnerElementO
 #endif
 
     return result;
+}
+
+AffineTransform LocalFrameView::accumulatedTransformFromView(const Frame& child) const
+{
+    CheckedPtr<RenderObject> childOwnerRenderer = child.ownerRenderer();
+    if (!childOwnerRenderer)
+        return { };
+
+    // Ensure |child| is a child of this frame.
+    ASSERT(child.tree().parent()->frameID() == m_frame->frameID());
+    ASSERT(childOwnerRenderer->frame().frameID() == m_frame->frameID());
+
+    // We aren't transforming anything here, we just need the resulting transformation matrix.
+    TransformState transformState(TransformState::ApplyTransformDirection, FloatPoint { });
+
+    // nullptr means we'll accumulate transforms up to the first RenderView.
+    childOwnerRenderer->mapLocalToContainer(nullptr, transformState, { MapCoordinatesMode::ApplyContainerFlip, MapCoordinatesMode::UseTransforms }, nullptr);
+
+    auto matrix = transformState.releaseTrackedTransform();
+    ASSERT(matrix->isAffine());
+    return matrix->toAffineTransform();
 }
 
 LayoutRect LocalFrameView::rectForFixedPositionLayout() const

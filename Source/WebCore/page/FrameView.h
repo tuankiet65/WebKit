@@ -132,6 +132,8 @@ public:
     // uses dark appearance, but the child frame's document is light).
     virtual OptionSet<FrameOwnerElementAppearance> appearanceOfOwnerElementOfChildFrame(const Frame&) const = 0;
 
+    virtual AffineTransform accumulatedTransformFromView(const Frame&) const = 0;
+
 private:
     ScrollableArea* enclosingScrollableArea() const final;
 

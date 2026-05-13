@@ -87,6 +87,14 @@ OptionSet<FrameOwnerElementAppearance> RemoteFrameView::appearanceOfOwnerElement
     return { };
 }
 
+AffineTransform RemoteFrameView::accumulatedTransformFromView(const Frame& child) const
+{
+    if (auto info = m_frame->frameTreeSyncData().childrenFrameLayoutInfo.getOptional(child.frameID()))
+        return info->accumulatedTransformFromView;
+
+    return { };
+}
+
 // FIXME: Implement all the stubs below.
 
 bool RemoteFrameView::isScrollableOrRubberbandable()

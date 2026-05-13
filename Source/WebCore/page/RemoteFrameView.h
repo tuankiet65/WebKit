@@ -54,6 +54,8 @@ public:
 
     OptionSet<FrameOwnerElementAppearance> appearanceOfOwnerElementOfChildFrame(const Frame&) const final;
 
+    AffineTransform accumulatedTransformFromView(const Frame&) const final;
+
 private:
     WEBCORE_EXPORT RemoteFrameView(RemoteFrame&);
 

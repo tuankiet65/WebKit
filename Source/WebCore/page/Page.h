@@ -441,6 +441,9 @@ public:
     bool NODELETE autofocusProcessed() const;
     bool NODELETE topDocumentHasDocumentClass(DocumentClass) const;
 
+    AffineTransform mainFrameTransform() const;
+    void updateMainFrameTransform();
+
     bool NODELETE hasInjectedUserScript();
     WEBCORE_EXPORT void setHasInjectedUserScript();
 

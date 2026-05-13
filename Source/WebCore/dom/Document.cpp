@@ -769,6 +769,7 @@ void Document::populateDocumentSyncDataForNewlyConstructedDocument(DocumentSyncD
     case DocumentSyncDataType::IsClosing:
     case DocumentSyncDataType::IsAutofocusProcessed:
     case DocumentSyncDataType::UserDidInteractWithPage:
+    case DocumentSyncDataType::MainFrameTransform:
         break;
     }
 }

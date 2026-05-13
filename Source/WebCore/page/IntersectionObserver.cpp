@@ -56,6 +56,7 @@
 #include "StyleKeyword+Logging.h"
 #include "StylePrimitiveNumericTypes+Evaluation.h"
 #include "StylePrimitiveNumericTypes+Logging.h"
+#include "TransformState.h"
 #include "VisibleRectContext.h"
 #include "WebCoreOpaqueRootInlines.h"
 #include <JavaScriptCore/AbstractSlotVisitorInlines.h>
@@ -502,16 +503,10 @@ auto IntersectionObserver::computeIntersectionState(const IntersectionObserverRe
             return;
         }
 
-        // This is needed to get the root's renderer to compute the root bounds.
-        // FIXME: remove this when computing root bounds no longer requires rootRenderer.
-        RefPtr hostLocalFrameView = dynamicDowncast<LocalFrameView>(hostFrameView);
-        if (!hostLocalFrameView)
-            return;
-        rootRenderer = hostLocalFrameView->renderView();
-
         intersectionState.canComputeIntersection = true;
         intersectionState.rootBounds = layoutViewportRectForIntersection();
-        rootUsedZoom = rootRenderer->style().usedZoom();
+        // FIXME: fill this in.
+        rootUsedZoom = 1;
     };
 
     computeRootBounds();
@@ -577,7 +572,18 @@ auto IntersectionObserver::computeIntersectionState(const IntersectionObserverRe
         intersectionState.absoluteTargetRect = targetRenderer->localToAbsoluteQuad(FloatRect(localTargetBounds)).boundingBox();
 
     if (intersectionState.isIntersecting) {
-        auto rootAbsoluteIntersectionRect = rootRenderer->localToAbsoluteQuad(rootLocalIntersectionRect).boundingBox();
+        auto rootAbsoluteIntersectionRect = [&] () {
+            if (rootRenderer)
+                return rootRenderer->localToAbsoluteQuad(rootLocalIntersectionRect).boundingBox();
+
+            // ASSERT(type() == Type::Remote);
+
+            FloatQuad quad { rootLocalIntersectionRect };
+
+            TransformState transformState(TransformState::ApplyTransformDirection, quad.boundingBox().center(), quad);
+            transformState.applyTransform(hostFrameView.frame().page()->mainFrameTransform());
+            return transformState.mappedQuad().boundingBox();
+        } ();
 
         if (root() && &targetRenderer->frame() == &rootRenderer->frame())
             intersectionState.absoluteIntersectionRect = rootAbsoluteIntersectionRect;
@@ -608,7 +614,18 @@ auto IntersectionObserver::computeIntersectionState(const IntersectionObserverRe
 
     intersectionState.observationChanged = isFirstObservation || intersectionState.thresholdIndex != registration.previousThresholdIndex;
     if (intersectionState.observationChanged) {
-        intersectionState.absoluteRootBounds = rootRenderer->localToAbsoluteQuad(intersectionState.rootBounds).boundingBox();
+        intersectionState.absoluteRootBounds = [&] () {
+            if (rootRenderer)
+                return rootRenderer->localToAbsoluteQuad(intersectionState.rootBounds).boundingBox();
+
+            // ASSERT(type() == Type::Remote);
+
+            FloatQuad quad { intersectionState.rootBounds };
+
+            TransformState transformState(TransformState::ApplyTransformDirection, quad.boundingBox().center(), quad);
+            transformState.applyTransform(hostFrameView.frame().page()->mainFrameTransform());
+            return transformState.mappedQuad().boundingBox();
+        } ();
 
         if (!intersectionState.absoluteTargetRect)
             intersectionState.absoluteTargetRect = targetRenderer->localToAbsoluteQuad(FloatRect(localTargetBounds)).boundingBox();

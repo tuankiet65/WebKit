@@ -198,6 +198,7 @@
 #include "TextRecognitionResult.h"
 #include "TextResourceDecoder.h"
 #include "ThermalMitigationNotifier.h"
+#include "TransformState.h"
 #include "UserContentProvider.h"
 #include "UserContentURLPattern.h"
 #include "UserMediaController.h"
@@ -921,6 +922,40 @@ DOMAudioSessionType Page::audioSessionType() const
 }
 #endif
 
+AffineTransform Page::mainFrameTransform() const
+{
+    RefPtr localMainFrame = dynamicDowncast<LocalFrame>(m_mainFrame);
+    if (!localMainFrame)
+        return m_topDocumentSyncData->mainFrameTransform;
+
+    RefPtr view = localMainFrame->view();
+    CheckedPtr<RenderObject> renderView = view->renderView();
+
+    // We aren't transforming anything here, we just need the resulting transformation matrix.
+    TransformState transformState(TransformState::ApplyTransformDirection, FloatPoint { });
+    renderView->mapLocalToContainer(nullptr, transformState, { MapCoordinatesMode::ApplyContainerFlip, MapCoordinatesMode::UseTransforms }, nullptr);
+
+    auto matrix = transformState.releaseTrackedTransform();
+    ASSERT(matrix->isAffine());
+    return matrix->toAffineTransform();
+}
+
+void Page::updateMainFrameTransform()
+{
+    RefPtr localMainFrame = dynamicDowncast<LocalFrame>(m_mainFrame);
+    ASSERT(localMainFrame);
+    if (!localMainFrame)
+        return;
+
+    auto transform = mainFrameTransform();
+    if (m_topDocumentSyncData->mainFrameTransform == transform)
+        return;
+
+    m_topDocumentSyncData->mainFrameTransform = transform;
+    if (settings().siteIsolationEnabled())
+        documentSyncClient().broadcastMainFrameTransformToOtherProcesses(transform);
+}
+
 void Page::setUserDidInteractWithPage(bool didInteract)
 {
     m_userHasInteractedSinceLastPageLoad = didInteract;
@@ -986,6 +1021,7 @@ void Page::updateTopDocumentSyncData(const DocumentSyncSerializationData& data)
 #if ENABLE(DOM_AUDIO_SESSION)
     case DocumentSyncDataType::AudioSessionType:
 #endif
+    case DocumentSyncDataType::MainFrameTransform:
         protect(m_topDocumentSyncData)->update(data);
         break;
     }
@@ -2206,6 +2242,9 @@ void Page::syncLocalFrameInfoToRemote()
             frame.loader().client().broadcastChildrenFrameLayoutInfoToOtherProcesses(childrenFrameLayoutInfo);
         }
     });
+
+    if (RefPtr localMainFrame = dynamicDowncast<LocalFrame>(m_mainFrame))
+        updateMainFrameTransform();
 }
 
 // https://html.spec.whatwg.org/multipage/webappapis.html#update-the-rendering

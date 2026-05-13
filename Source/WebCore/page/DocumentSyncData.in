@@ -67,3 +67,4 @@ DocumentURL : URL [Headers=<wtf/URL.h>]
 DocumentSecurityOrigin : RefPtr<WebCore::SecurityOrigin> [Headers=<WebCore/SecurityOrigin.h>]
 DocumentClasses : OptionSet<WebCore::DocumentClass> [Headers=<WebCore/DocumentClasses.h>]
 HasInjectedUserScript : bool
+MainFrameTransform : WebCore::AffineTransform [Headers=<WebCore/AffineTransform.h>]
